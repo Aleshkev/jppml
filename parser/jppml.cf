@@ -1,0 +1,134 @@
+
+entrypoints [Dec]                                     ;
+
+-- Comments
+
+comment "--" ;
+comment "(*" "*)" ;
+
+-- Identifiers
+
+token Id (lower (letter | digit | '_')*)              ;
+token IdCap (upper (letter | digit | '_')*)           ;
+token IdVar ('\'' (letter | digit | '_')*)            ;
+
+-- Constants
+
+CInt.     Con       ::= Integer                       ; -- 42
+CString.  Con       ::= String                        ; -- "abc"
+CUnit.    Con       ::= "(" ")"                       ; -- ()
+
+-- Expressions
+
+ECon.     Exp11     ::= Con                           ; -- 42
+EObjCon.  Exp11     ::= IdCap                         ; -- Empty
+EId.      Exp11     ::= Id                            ; -- x
+
+ETup.     Exp11     ::= "(" Exp "," [Exp] ")"         ; -- (a, b)
+ELst.     Exp11     ::= "[" [Exp] "]"                 ; -- [a, b]
+separator Exp ","                                     ;
+
+-- Odpowiada też za konstruowanie obiektów, np. "Some x" będzie zinterpretowane
+-- jako EApp (EObjCon "Some") (EId "x").
+EApp.     Exp10     ::= Exp10 Exp11                   ; -- f x
+
+ENeg.     Exp9      ::= "-" Exp10                     ; -- -10
+
+EMul.     Exp8      ::= Exp8 "*" Exp9                 ; -- 2 * 2
+EDiv.     Exp8      ::= Exp8 "/" Exp9                 ; -- 8 / 4
+
+EAdd.     Exp7      ::= Exp7 "+" Exp8                 ; -- 2 + 2
+ESub.     Exp7      ::= Exp7 "-" Exp8                 ; -- 3 - 2
+ECons.    Exp6      ::= Exp7 "::" Exp6                ; -- 1 :: [2, 3]
+EAppend.  Exp5      ::= Exp6 "@" Exp5                 ; -- [1, 2] @ [2, 3]
+ECat.     Exp5      ::= Exp6 "^" Exp5                 ; -- "ab" ^ "c"
+
+-- Niedozwolone np. a < b < c
+ERel.     Exp4      ::= Exp5 ERelOp Exp5              ;
+EREq.     ERelOp    ::= "=="                          ;
+ERNe.     ERelOp    ::= "!="                          ;
+ERLt.     ERelOp    ::= "<"                           ;
+ERLe.     ERelOp    ::= "<="                          ;
+ERGt.     ERelOp    ::= ">"                           ;
+ERGe.     ERelOp    ::= ">="                          ;
+
+EAnd.     Exp3      ::= Exp3 "&&" Exp4                ; -- a && b
+
+EOr.      Exp2      ::= Exp2 "||" Exp3                ; -- a || b
+
+EIf.      Exp1      ::= "if" Exp "then" Exp "else" Exp1 ; -- if a then b else c
+
+ELet.     Exp       ::= "let" [LetBind] "in" Exp      ; -- let ... in ...
+
+ECase.    Exp       ::= "case" Exp "of" [ECaseBind]   ; -- case x of ...
+eCaseAlt. Exp       ::= "case" Exp "of" "|" [ECaseBind] ; -- case x of ...
+define eCaseAlt a b = ECase a b                       ;
+ECBJust.  ECaseBind ::= Pat "->" Exp                  ;
+separator nonempty ECaseBind "|"                      ;
+
+EFn.      Exp       ::= "fn" [Id] "->" Exp            ;
+separator nonempty Id ""                              ;
+
+coercions  Exp 11                                     ;
+
+-- Patterns
+
+PCon.     Pat3      ::= Con                           ; -- 0
+PId.      Pat3      ::= Id                            ; -- x
+PWild.    Pat3      ::= "_"                           ; -- _
+
+PTup.     Pat3      ::= "(" Pat "," [Pat] ")"         ; -- (a, b)
+PLst.     Pat3      ::= "[" [Pat] "]"                 ; -- [a]
+separator Pat ","                                     ;
+
+PObjCon.  Pat3      ::= IdCap                         ; -- Empty
+
+PObj.     Pat1      ::= IdCap Pat2                    ; -- Some x
+
+PCons.    Pat       ::= Pat1 "::" Pat                 ; -- 1 :: [2, 3]
+
+coercions  Pat 3                                      ;
+
+-- Types
+
+TIdVar.   Typ3      ::= IdVar                         ; -- 'a
+TId.      Typ3      ::= TypLst Id                     ; -- int list
+
+TLEmpty.  TypLst    ::=                               ;
+TLOne.    TypLst    ::= Typ3                          ; -- int
+TLMany.   TypLst    ::= "(" Typ "," [Typ] ")"         ; -- (int, string)
+separator nonempty Typ ","                            ;
+
+TTup.     Typ1      ::= Typ2 "*" [TTupElem]           ; -- int * string
+TTupJust. TTupElem  ::= Typ2                          ;
+separator nonempty TTupElem "*"                       ;
+
+TFn.      Typ       ::= Typ1 "->" Typ                 ; -- int -> string
+
+coercions Typ 3                                       ;
+
+-- Declarations
+
+DLet.     Dec       ::= "let" [LetBind]               ; -- let a = 0 and f x = a
+DType.    Dec       ::= "type" [TypBind]              ; -- type x = A | B of c
+DExn.     Dec       ::= "exception" [ExnBind]         ; -- exception A of string
+DOpen.    Dec       ::= "open" [IdCap]                ; -- open List
+separator nonempty IdCap "and"                        ;
+separator Dec ""                                      ;
+
+LBJust.   LetBind   ::= Id "=" Exp                    ; -- let x = 4
+LBAnon.   LetBind   ::= "_" "=" Exp                   ; -- let _ = x
+separator nonempty LetBind "and"                      ;
+
+TBJust.   TypBind   ::= TypLst Id "=" [DTag]          ; -- 'a t = A | B
+tBJust.   TypBind   ::= TypLst Id "=" "|" [DTag]      ; -- 'a t = | A | B
+define tBJust a b c = TBJust a b c                    ;
+separator nonempty TypBind "and"                      ;
+
+DTCon.    DTag      ::= IdCap                         ; -- A
+DTArg.    DTag      ::= IdCap "of" Typ                ; -- A of int
+separator nonempty DTag "|"                           ;
+
+EBCon.    ExnBind   ::= IdCap                         ; -- A
+EBArg.    ExnBind   ::= IdCap "of" Typ                ; -- A of int
+separator nonempty ExnBind "and"                      ;

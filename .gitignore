@@ -1,3 +1,10 @@
+
+# Files without extension (executables)
+
+*
+!/**/
+!*.*
+
 # https://github.com/github/gitignore/blob/main/Haskell.gitignore
 
 dist
@@ -23,3 +30,4 @@ cabal.project.local
 cabal.project.local~
 .HTF/
 .ghc.environment.*
+

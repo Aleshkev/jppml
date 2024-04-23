@@ -46,15 +46,15 @@ $white+ ;
     { tok (eitherResIdent TV) }
 
 -- token Id
-$s (\_ | ($d | $l)) *
+\_ * $s (\_ | ($d | $l)) *
     { tok (eitherResIdent T_Id) }
 
 -- token IdCap
-$c (\_ | ($d | $l)) *
+\_ * $c (\_ | ($d | $l)) *
     { tok (eitherResIdent T_IdCap) }
 
 -- token IdVar
-\' (\_ | ($d | $l)) *
+\' \_ * (\_ | ($d | $l)) *
     { tok (eitherResIdent T_IdVar) }
 
 -- Keywords and Ident

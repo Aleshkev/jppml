@@ -1,0 +1,91 @@
+
+-- Lists.
+
+let x = []
+let x = __Empty
+
+let x = [1]
+let x = 1 :: []
+let x = __cons 1 __Empty
+
+let x = 1 :: 2 :: 3 :: []
+let x = [1, 2, 3]
+let x = __cons 1 (__cons 2 (__cons 3 __Empty))
+
+-- Operators.
+
+let x = -a
+let x = __neg a
+
+let x = a - b
+let x = __sub a b
+
+let x = a (- b)
+let x = a (__neg b)
+
+let x = a * b * c
+let x = __mul (__mul a b) c
+
+let x = a / b / c
+let x = __div (__div a b) c
+
+let x = a + b + c
+let x = __add (__add a b) c
+
+let x = a - b - c
+let x = __sub (__sub a b) c
+
+let x = a :: b :: c
+let x = __cons a (__cons b c)
+
+let x = a @ b @ c
+let x = __append a (__append b c)
+
+let x = a ^ b ^ c
+let x = __cat a (__cat b c)
+
+let x = a == b
+let x = __eq a b
+
+let x = a < b
+let x = __lt a b
+
+-- Lazy expressions.
+
+let x = a && b
+let x = __and a (fn __x -> b)
+
+let x = a || b
+let x = __or a (fn __x -> b)
+
+let x = if a then b else c
+let x = __if a (fn __x -> b) (fn __x -> c)
+
+-- Functions.
+
+let x = fn a b -> a + b
+let x = fn a -> (fn b -> a + b)
+let x = fn a -> fn b -> a + b
+
+-- Nesting.
+
+let x = ((a + b), a)
+let x = ((__add a b), a)
+
+let x = [[2, [a + b]]]
+let x = [[2, [__add a b]]]
+
+-- Patterns.
+
+let x = case x of [] -> 0
+let x = case x of __Empty -> 0
+
+let x = case x of [1] -> 0
+let x = case x of 1 :: [] -> 0
+let x = case x of __Cons (1, __Empty) -> 0
+
+let x = case x of [1, 2] -> 0
+let x = case x of 1 :: 2 :: [] -> 0
+let x = case x of __Cons (1, __Cons (2, __Empty)) -> 0
+
+

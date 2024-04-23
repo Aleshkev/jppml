@@ -24,13 +24,13 @@ except ``"`` unless preceded by ``\``.
 
 
 Id literals are recognized by the regular expression
-`````lower ('_' | digit | letter)*`````
+`````'_'* lower ('_' | digit | letter)*`````
 
 IdCap literals are recognized by the regular expression
-`````upper ('_' | digit | letter)*`````
+`````'_'* upper ('_' | digit | letter)*`````
 
 IdVar literals are recognized by the regular expression
-`````''' ('_' | digit | letter)*`````
+`````''' '_'* ('_' | digit | letter)*`````
 
 
 ===Reserved words and symbols===

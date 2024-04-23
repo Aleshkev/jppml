@@ -1,0 +1,205 @@
+
+let x=4
+let x = 4
+let x = (4)
+let (x) = 4 #
+
+let x = _ #
+
+let x = 3242
+
+let x = "abcd"
+let x = 'a' #
+let x = 'abcd' #
+
+let x = a
+
+let x = ()
+
+let x = (1, 2)
+let x = (1, 2,)
+let x = (1, 2, ,) #
+let x = 1, 2 #
+
+let x = (1, 2, 4)
+let x = (1, 2, 4,)
+
+let x = []
+let x = [,] #
+
+let x = [2]
+let x = [2,]
+let x = [, 2] #
+let x = [2,,] #
+
+let x = [2, 3]
+let x = [2, 3,]
+let x = [2, 3,,] #
+
+let x = [3, 4, 5]
+let x = ([3, 4,(5)])
+let x = [3, 4, 5, ]
+let x = [, 4, 5, ] #
+
+let x = f a
+
+let x = f a b
+let x = (f a) b
+
+let a = -b
+let a = (-b)
+
+let a = f (-b)
+
+let a = f - b
+
+let x = a * b * c
+let x = (a * b) * c
+
+let x = a / b / c
+let x = (a / b) / c
+
+let x = a + b + c
+let x = (a + b) + c
+
+let x = a - b - c
+let x = (a - b) - c
+
+let x = a :: b :: c
+let x = a :: (b :: c)
+
+let x = a @ b @ c
+let x = a @ (b @ c)
+
+let x = a ^ b ^ c
+let x = a ^ (b ^ c)
+
+let x = Empty
+
+let x = Some x
+let x = Some (x)
+
+let x = Some (a, b)
+
+let x = a && b && c
+let x = (a && b) && c
+
+let x = a || b || c
+let x = (a || b) || c
+
+let x = (a < b)
+let x = a < b
+
+let x = a < b < c #
+
+
+let x = True && False
+
+let x = True || False && False
+
+let x = 4 and y = "abc"
+
+open List
+
+open A and B
+
+exception E
+exception E of #
+
+exception E of int 
+exception E of (int)
+
+exception E1 of int and E2
+
+exception E1 of int * string and E2
+exception E1 of (int * string) and E2
+
+type t = B
+type t = (B) #
+type (t) = B #
+
+type t = B | C
+type t = | B | C
+type t = B | C | #
+type t = | | B | C #
+
+type t = B of int
+
+type t = B of int * string
+
+type t = B of int | C of int list
+
+type 'a t = B of 'a
+
+type 'a t = B of 'a list
+
+type ('a, 'b) t = B of 'a list
+type ('a, 'b,) t = B of 'a list #
+
+type ('a, 'b, 'c) t = B of 'a list
+type ('a, 'b, 'c,) t = B of 'a list #
+
+type t = B of t list
+
+type t = B of int -> int
+
+type t = B of int -> int -> bool
+type t = B of int -> (int -> bool)
+
+type t = B of int list
+
+type t = B of int list list
+type t = B of (int list) list
+
+type t = B of int * int
+
+type t = B of int list * int -> string
+type t = B of (((int list) * (int)) -> (string))
+
+type t = B of int -> int * string
+
+type t = B of int * int * string * string
+
+let x = case x of 7 -> 0
+let x = case (x) of (7) -> (0)
+let x = (case (x) of (7) -> (0))
+let x = case x of (7 -> 0) #
+
+let x = case x of _ -> 0
+
+let x = case x of x -> 0
+
+let x = case x of B -> 0
+
+let x = case x of B (Some x) -> 0
+
+let x = case x of B [] -> 0
+
+let x = case x of (x) -> 0
+
+let x = case x of (x, y) -> 0
+let x = case x of (x, y,) -> 0
+
+let x = case x of (1, _, x) -> 0
+
+let x = case a of _ -> 0
+
+let x = case a of _ -> 0 | b -> "abc"
+
+let x = case (a, b) of (a, b) -> 0
+
+let x = case (a, (b, c)) of (a, _) -> 0
+
+let x = case Some x of Some x -> 0
+
+let x = case x of _ -> case y of _ -> case z of _ -> 0
+let x = case x of _ -> (case y of _ -> (case z of _ -> 0))
+
+let x = case [1, 2] of 1 :: t -> 0
+
+let x = case [1, 2] of a :: b :: c -> 0
+let x = case [1, 2] of a :: (b :: c) -> 0
+
+let x = case [1, 2] of [1, x] -> 0
+
+let x = case x of [1, x] -> 0

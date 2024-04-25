@@ -20,32 +20,33 @@ transTree decs =
 
 transExp :: Show a => Exp' a -> Exp' a 
 transExp x = case x of
-  -- ECon _ con -> failure x
-  -- EObjCon _ idcap -> failure x
-  -- EId _ id -> failure x
+  ECon p con -> ECon p con
+  EObjCon p idcap -> EObjCon p idcap
+  EId p id -> EId p id
   ETup p exp exps -> ETup p (transExp exp) (map transExp exps)
   ELst p exps -> case exps of 
     [] -> EObjCon p (IdCap "__Empty")
     exp : exps_ -> transExp $ ECons p (transExp exp) (transExp $ ELst p exps_)
   EApp p exp1 exp2 -> EApp p (transExp exp1) (transExp exp2)
   ENeg p exp -> delegate p "__neg" [exp]
-  EMul p exp1 exp2 -> delegate p "__mul" [exp1, exp2]
-  EDiv p exp1 exp2 -> delegate p "__div" [exp1, exp2]
-  EAdd p exp1 exp2 -> delegate p "__add" [exp1, exp2]
-  ESub p exp1 exp2 -> delegate p "__sub" [exp1, exp2]
+  -- EMul p exp1 exp2 -> delegate p "__mul" [exp1, exp2]
+  -- EDiv p exp1 exp2 -> delegate p "__div" [exp1, exp2]
+  -- EAdd p exp1 exp2 -> delegate p "__add" [exp1, exp2]
+  -- ESub p exp1 exp2 -> delegate p "__sub" [exp1, exp2]
   ECons p exp1 exp2 -> delegate p "__cons" [exp1, exp2]
   EAppend p exp1 exp2 -> delegate p "__append" [exp1, exp2]
-  ECat p exp1 exp2 -> delegate p "__cat" [exp1, exp2]
-  ERel p exp1 erelop exp2 -> case erelop of
-    EREq _ -> delegate p "__eq" [exp1, exp2]
-    ERNe _ -> delegate p "__ne" [exp1, exp2]
-    ERLt _ -> delegate p "__lt" [exp1, exp2]
-    ERLe _ -> delegate p "__le" [exp1, exp2]
-    ERGt _ -> delegate p "__gt" [exp1, exp2]
-    ERGe _ -> delegate p "__ge" [exp1, exp2]
+  -- ECat p exp1 exp2 -> delegate p "__cat" [exp1, exp2]
+  ERel p exp1 erelop exp2 -> ERel p (transExp exp1) erelop (transExp exp2)
+  -- ERel p exp1 erelop exp2 -> case erelop of
+  --   EREq _ -> delegate p "__eq" [exp1, exp2]
+  --   ERNe _ -> delegate p "__ne" [exp1, exp2]
+  --   ERLt _ -> delegate p "__lt" [exp1, exp2]
+  --   ERLe _ -> delegate p "__le" [exp1, exp2]
+  --   ERGt _ -> delegate p "__gt" [exp1, exp2]
+  --   ERGe _ -> delegate p "__ge" [exp1, exp2]
   EAnd p exp1 exp2 -> delegate p "__and" [exp1, EFn p [Id "__x"] exp2]
   EOr p exp1 exp2 -> delegate p "__or" [exp1, EFn p [Id "__x"] exp2]
-  EIf p exp1 exp2 exp3 -> delegate p "__if" [exp1, EFn p [Id "__x"] exp2, EFn p [Id "__x"] exp3]
+  EIf p exp1 exp2 exp3 -> EIf p (transExp exp1) (transExp exp2) (transExp exp3)
   ELet p letbinds exp -> ELet p (map transLetBind letbinds) (transExp exp)
   ECase p exp ecasebinds -> ECase p (transExp exp) (map transECaseBind ecasebinds)
   EFn p ids exp -> case ids of
@@ -102,8 +103,9 @@ transDec x = case x of
   DLet p letbinds -> DLet p (map transLetBind letbinds)
   DType p typbinds -> DType p (map transTypBind typbinds)
   -- DExn p exnbinds -> DExn p (map transExnBind exnbinds)
-  DExn p exnbinds -> error "Not implemented"
+  -- DExn p exnbinds -> error "Not implemented"
   DOpen p idcaps -> DOpen p idcaps
+  x -> x
 
 transLetBind :: Show a => LetBind' a -> LetBind' a
 transLetBind x = case x of
@@ -116,7 +118,7 @@ transTypBind x = case x of
 
 transDTag :: Show a => DTag' a -> DTag' a
 transDTag x = case x of
-  DTCon p idcap -> transDTag $ DTArg p idcap (TId p (TLEmpty p) (Id "__unit"))
+  DTCon p idcap -> DTCon p idcap
   DTArg p idcap typ -> DTArg p idcap (transTyp typ)
 
 -- transExnBind :: Show a => ExnBind' a -> ExnBind' a

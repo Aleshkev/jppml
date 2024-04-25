@@ -46,7 +46,7 @@ $white+ ;
     { tok (eitherResIdent TV) }
 
 -- token Id
-\_ * $s (\_ | ($d | $l)) *
+\_ * $s ([\' \_]| ($d | $l)) *
     { tok (eitherResIdent T_Id) }
 
 -- token IdCap

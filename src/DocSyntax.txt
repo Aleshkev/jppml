@@ -24,7 +24,7 @@ except ``"`` unless preceded by ``\``.
 
 
 Id literals are recognized by the regular expression
-`````'_'* lower ('_' | digit | letter)*`````
+`````'_'* lower (["'_"] | digit | letter)*`````
 
 IdCap literals are recognized by the regular expression
 `````'_'* upper ('_' | digit | letter)*`````

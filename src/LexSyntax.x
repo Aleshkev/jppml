@@ -50,7 +50,7 @@ $white+ ;
     { tok (eitherResIdent T_Id) }
 
 -- token IdCap
-\_ * $c (\_ | ($d | $l)) *
+\_ * $c ([\' \_]| ($d | $l)) *
     { tok (eitherResIdent T_IdCap) }
 
 -- token IdVar

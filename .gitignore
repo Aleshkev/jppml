@@ -7,6 +7,7 @@
 
 *.bak
 DocSyntax.txt
+*.info
 
 # https://github.com/github/gitignore/blob/main/Haskell.gitignore
 

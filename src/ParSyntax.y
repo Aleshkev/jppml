@@ -9,6 +9,8 @@ module ParSyntax
   ( happyError
   , myLexer
   , pListDec
+  , pTyp
+  , pExp
   ) where
 
 import Prelude
@@ -19,6 +21,8 @@ import LexSyntax
 }
 
 %name pListDec_internal ListDec
+%name pTyp_internal Typ
+%name pExp_internal Exp
 -- no lexer declaration
 %monad { Err } { (>>=) } { return }
 %tokentype {Token}
@@ -330,5 +334,11 @@ myLexer = tokens
 
 pListDec :: [Token] -> Err [AbsSyntax.Dec]
 pListDec = fmap snd . pListDec_internal
+
+pTyp :: [Token] -> Err AbsSyntax.Typ
+pTyp = fmap snd . pTyp_internal
+
+pExp :: [Token] -> Err AbsSyntax.Exp
+pExp = fmap snd . pExp_internal
 }
 

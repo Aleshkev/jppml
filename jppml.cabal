@@ -17,7 +17,8 @@ common warnings
 
 library
     import:           warnings
-    exposed-modules:  Interpreter, AbsSyntax, LexSyntax, ParSyntax, PrintSyntax, Util, Preprocess
+    exposed-modules:  AbsSyntax, LexSyntax, ParSyntax, PrintSyntax,
+                      Preprocess, Infer, Typecheck, Eval, Core, Util
     other-modules:    
     -- other-extensions:
     build-depends:    base ^>=4.12.0.0, containers, array, text, mtl
@@ -30,7 +31,7 @@ executable jppml
     -- other-modules:
     -- other-extensions:
     build-depends:
-        base ^>=4.12.0.0,
+        base ^>=4.12.0.0, containers, array, text, mtl,
         jppml
 
     hs-source-dirs:   app

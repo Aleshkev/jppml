@@ -1,5 +1,5 @@
 
-entrypoints [Dec]                                     ;
+entrypoints [Dec], Typ, Exp                                     ;
 
 -- Comments
 

@@ -26,40 +26,40 @@ transExp x = case x of
   ETup p exp exps -> ETup p (transExp exp) (map transExp exps)
   ELst p exps -> case exps of 
     [] -> EObjCon p (IdCap "__Empty")
-    exp : exps_ -> transExp $ ECons p (transExp exp) (transExp $ ELst p exps_)
+    exp : exps' -> transExp $ ECons p (transExp exp) (transExp $ ELst p exps')
   EApp p exp1 exp2 -> EApp p (transExp exp1) (transExp exp2)
-  ENeg p exp -> delegate p "__neg" [exp]
-  -- EMul p exp1 exp2 -> delegate p "__mul" [exp1, exp2]
-  -- EDiv p exp1 exp2 -> delegate p "__div" [exp1, exp2]
-  -- EAdd p exp1 exp2 -> delegate p "__add" [exp1, exp2]
-  -- ESub p exp1 exp2 -> delegate p "__sub" [exp1, exp2]
-  ECons p exp1 exp2 -> delegate p "__cons" [exp1, exp2]
-  EAppend p exp1 exp2 -> delegate p "__append" [exp1, exp2]
-  -- ECat p exp1 exp2 -> delegate p "__cat" [exp1, exp2]
-  ERel p exp1 erelop exp2 -> ERel p (transExp exp1) erelop (transExp exp2)
-  -- ERel p exp1 erelop exp2 -> case erelop of
-  --   EREq _ -> delegate p "__eq" [exp1, exp2]
-  --   ERNe _ -> delegate p "__ne" [exp1, exp2]
-  --   ERLt _ -> delegate p "__lt" [exp1, exp2]
-  --   ERLe _ -> delegate p "__le" [exp1, exp2]
-  --   ERGt _ -> delegate p "__gt" [exp1, exp2]
-  --   ERGe _ -> delegate p "__ge" [exp1, exp2]
-  EAnd p exp1 exp2 -> delegate p "__and" [exp1, EFn p [Id "__x"] exp2]
-  EOr p exp1 exp2 -> delegate p "__or" [exp1, EFn p [Id "__x"] exp2]
-  EIf p exp1 exp2 exp3 -> EIf p (transExp exp1) (transExp exp2) (transExp exp3)
+  ENeg p exp -> repWithFn p "__neg" [exp]
+  EMul p exp1 exp2 -> repWithFn p "__mul" [exp1, exp2]
+  EDiv p exp1 exp2 -> repWithFn p "__div" [exp1, exp2]
+  EAdd p exp1 exp2 -> repWithFn p "__add" [exp1, exp2]
+  ESub p exp1 exp2 -> repWithFn p "__sub" [exp1, exp2]
+  ECons p exp1 exp2 -> repWithFn p "__cons" [exp1, exp2]
+  EAppend p exp1 exp2 -> repWithFn p "__append" [exp1, exp2]
+  ECat p exp1 exp2 -> repWithFn p "__cat" [exp1, exp2]
+  ERel p exp1 erelop exp2 -> do 
+    let op = case erelop of
+          EREq _ -> "__eq"
+          ERNe _ -> "__ne"
+          ERLt _ -> "__lt"
+          ERLe _ -> "__le"
+          ERGt _ -> "__gt"
+          ERGe _ -> "__ge"
+    repWithFn p op [exp1, exp2]
+  EAnd p exp1 exp2 -> repWithFn p "__and" [exp1, EFn p [Id "__x"] exp2]
+  EOr p exp1 exp2 -> repWithFn p "__or" [exp1, EFn p [Id "__x"] exp2]
+  EIf p exp1 exp2 exp3 -> repWithFn p "__if" [exp1, EFn p [Id "__x"] exp2, EFn p [Id "__x"] exp3]
   ELet p letbinds exp -> ELet p (map transLetBind letbinds) (transExp exp)
   ECase p exp ecasebinds -> ECase p (transExp exp) (map transECaseBind ecasebinds)
   EFn p ids exp -> case ids of
     [] -> error "a function must have at least one argument"
     [id] -> EFn p [id] (transExp exp)
     id : ids_ -> EFn p [id] (transExp $ EFn p ids_ exp)
-  x -> x
   where
-    delegate :: Show a => a -> String -> [Exp' a] -> Exp' a
-    delegate p fname exps = 
+    repWithFn :: Show a => a -> String -> [Exp' a] -> Exp' a
+    repWithFn p fname exps = 
       case reverse exps of 
       [] -> EId p (Id fname)
-      exp : exps_ -> EApp p (delegate p fname (reverse exps_)) (transExp exp) 
+      exp : exps_ -> EApp p (repWithFn p fname (reverse exps_)) (transExp exp) 
 
 transECaseBind :: Show a => ECaseBind' a -> ECaseBind' a
 transECaseBind x = case x of
@@ -67,17 +67,16 @@ transECaseBind x = case x of
 
 transPat :: Show a => Pat' a -> Pat' a
 transPat x = case x of
-  -- PCon p con -> 
-  -- PId _ id -> failure x
-  -- PWild _ -> failure x
-  -- PTup p pat pats -> failure x
+  PCon p con -> PCon p con
+  PId p id -> PId p id
+  PWild p -> PWild p
+  PTup p pat pats -> PTup p (transPat pat) (map transPat pats)
   PLst p pats -> case pats of
     [] -> PObjCon p (IdCap "__Empty")
     pat : pats_ -> transPat $ PCons p pat (PLst p pats_)
-  -- PObjCon _ idcap -> failure x
-  -- PObj _ idcap pat -> failure x
+  PObjCon p idcap -> PObjCon p idcap
+  PObj p idcap pat -> PObj p idcap (transPat pat)
   PCons p pat1 pat2 -> PObj p (IdCap "__Cons") (PTup p (transPat pat1) [transPat pat2])
-  x -> x
 
 transTyp :: Show a => Typ' a -> Typ' a
 transTyp x = case x of

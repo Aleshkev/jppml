@@ -1,19 +1,5 @@
 
 
--- Core types
-
-
--- Options
-
-type 'a option =
-  | None
-  | Some of 'a
-
-let value = fn o default -> case o of Some x -> x | None -> default
-let get = fn o -> case o of Some x -> x | None -> invalid_arg "option is None"
-
-
-
 
 -- Exceptions
 
@@ -24,9 +10,18 @@ exception Failure of string
 exception Not_found
 exception Division_by_zero
 
--- 'raise' defined elsewhere.
 let invalid_arg = fn s -> raise (Invalid_argument s)
 let failwith = fn s -> raise (Failure s)
+
+
+-- Options
+
+type 'a option =
+  | None
+  | Some of 'a
+
+let value = fn o default -> case o of Some x -> x | None -> default
+let get = fn o -> case o of Some x -> x | None -> invalid_arg "option is None"
 
 
 type bool = True | False
@@ -48,18 +43,14 @@ let not = fn x -> case x of
   | False -> True
 
 let __and = fn x fy ->
-  if x then fy () else __False
+  if x then fy () else False
 
 let __or = fn x fy ->
-  if x then __True else fy ()
+  if x then True else fy ()
 
 -- Integer arithmetic
 
---let __add = fn x y -> __magicIntOp ("add", x, y)
---let __sub = fn x y -> __magicIntOp ("sub", x, y)
---let __mul = fn x y -> __magicIntOp ("mul", x, y)
---let __div = fn x y -> __magicIntOp ("div", x, y)
---let __neg = fn x -> 0 - x
+let __neg = fn x -> 0 - x
 
 let succ = fn x -> x + 1
 let pred = fn x -> x - 1
@@ -75,7 +66,6 @@ let ignore = fn x -> ()
 
 let cat = fn a b -> a ^ b
 
--- let to_string = fn x -> __magicToString x
 let bool_of_string = fn x -> case x of
   | "True" -> Some True 
   | "False" -> Some False
@@ -103,7 +93,6 @@ let append = __append
 
 -- Input / output
 
--- 'print' defined elsewhere.
 let print_endline = fn s -> print (s ^ "\n")
 
 -- Result type

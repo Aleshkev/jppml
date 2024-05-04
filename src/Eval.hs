@@ -1,28 +1,28 @@
-module Interpreter where
+module Eval where
 
-import LexSyntax
 import ParSyntax
 
 import AbsSyntax
-import Control.Monad.Except (Except, ExceptT, runExceptT)
+import Control.Exception (try)
+import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.Function (const, flip, (&))
-import Data.List (elem, isPrefixOf, length, reverse, sort, unzip)
-import Data.Map ((!))
+import Data.Function (const, (&))
+import Data.List (elem, sort)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Ord (Ord)
-import Debug.Trace (trace, traceShow, traceShowId)
 import GHC.OldList (intercalate)
 import GHC.Show (Show)
 import GHC.Stack (HasCallStack)
 import Preprocess (transTree)
-import PrintSyntax (printTree)
+import Typecheck (TypeStore, emptyTypeStore, insertBuiltinType, runTypecheckM, typecheckDecLst)
+import qualified Typecheck
 import Util (ansiDefault, ansiRed)
-import Prelude (Bool (False, True), Either (..), Eq ((/=), (==)), Foldable (foldl), IO, Int, Integer, Integral (div), Monad (return), Num ((*), (-)), Ord ((<), (<=), (>), (>=)), Show, String, all, error, fail, foldr, fst, map, putStr, putStrLn, readFile, show, snd, uncurry, zip, ($), (+), (++), (.), (/))
+import Prelude (Bool (False, True), Either (..), Eq ((/=), (==)), IO, IOError, Integer, Integral (div), Monad (return), Num ((*), (-)), Ord ((<), (<=), (>), (>=)), String, all, error, fail, foldr, map, putStr, putStrLn, readFile, show, uncurry, ($), (+), (++), (.))
+import Infer (niceShowType)
 
-data FnVal = FnVal Env (Ptr -> Ev Ptr)
+data FnVal = FnVal EvalEnv (Ptr -> EvalM Ptr)
 instance Show FnVal where
   show = const "<fn>"
 
@@ -31,16 +31,23 @@ data Val
   | VInt Integer
   | VString String
   | VFn FnVal
-  | VBuiltinFn String
   | VTuple [Ptr]
   | VObjCon String
   | VObj String Ptr
   deriving (Show)
 
-printVal :: Ptr -> Ev String
+boolToVal :: Bool -> Val
+boolToVal b = if b then VObjCon "True" else VObjCon "False"
+
+valToBool :: Val -> Bool
+valToBool v = case v of VObjCon "True" -> True; _ -> False
+
+type BuiltinVal = (String, String, Val) -- identifier, type (to be parsed), value
+
+printVal :: Ptr -> EvalM String
 printVal ptr = printVal' [] ptr
  where
-  printVal' :: [Ptr] -> Ptr -> Ev String
+  printVal' :: [Ptr] -> Ptr -> EvalM String
   printVal' vis ptr = do
     if ptr `elem` vis
       then return "<cycle>"
@@ -53,7 +60,6 @@ printVal ptr = printVal' [] ptr
           VInt x -> return $ show x
           VString x -> return $ show x
           VFn _ -> return "<fn>"
-          VBuiltinFn _ -> return "<__fn>"
           VTuple ptrs -> do
             vals <- mapM aux ptrs
             return $ "(" ++ intercalate ", " vals ++ ")"
@@ -72,60 +78,58 @@ printVal ptr = printVal' [] ptr
 
 newtype Ptr = Ptr Integer deriving (Eq, Ord, Show)
 
-data Store = Store
+data EvalState = EvalState
   { vals :: Map.Map Ptr Val
   , nextPtr :: Ptr
   , globBinds :: Map.Map String Ptr
+  , typeState :: TypeStore
   }
-  deriving (Show)
 
-emptyStore :: Store
-emptyStore = Store{vals = Map.empty, nextPtr = Ptr 0, globBinds = Map.empty}
+-- deriving (Show)
 
-newtype Env = Env
+emptyEvalState :: EvalState
+emptyEvalState = EvalState{vals = Map.empty, nextPtr = Ptr 0, globBinds = Map.empty, typeState = emptyTypeStore}
+
+newtype EvalEnv = EvalEnv
   { binds :: Map.Map String Ptr
   }
   deriving (Show)
 
-emptyEnv :: Env
-emptyEnv = Env{binds = Map.empty}
+emptyEvalEnv :: EvalEnv
+emptyEvalEnv = EvalEnv{binds = Map.empty}
 
-type Ev = ReaderT Env (StateT Store (ExceptT String IO))
-
-
-redError :: HasCallStack => String -> a
-redError s = error $ ansiRed ++ s ++ ansiDefault
+type EvalM = ReaderT EvalEnv (StateT EvalState (ExceptT String IO))
 
 incPtr :: Ptr -> Ptr
 incPtr (Ptr x) = Ptr (x + 1)
 
-alloc :: () -> Ev Ptr
+alloc :: () -> EvalM Ptr
 alloc () = do
   ptr <- gets nextPtr
-  modify (\store -> store{nextPtr = incPtr ptr})
+  modify (\state -> state{nextPtr = incPtr ptr})
   return ptr
 
-ptrGet :: Ptr -> Ev Val
+ptrGet :: Ptr -> EvalM Val
 ptrGet ptr = do
   val <- gets vals
   case val & Map.lookup ptr of
-    Nothing -> redError $ "internal: null pointer '" ++ show ptr ++ "'"
-    Just VRec -> error "value not constructed yet"
+    Nothing -> throwError $ "internal: null pointer '" ++ show ptr ++ "'"
+    Just VRec -> throwError "value not yet constructed"
     Just x -> return x
 
-ptrSet :: Ptr -> Val -> Ev ()
+ptrSet :: Ptr -> Val -> EvalM ()
 ptrSet ptr val = do
-  modify (\store -> store{vals = vals store & Map.insert ptr val})
+  modify (\state -> state{vals = vals state & Map.insert ptr val})
 
-insertBind :: String -> Ptr -> Env -> Env
+insertBind :: String -> Ptr -> EvalEnv -> EvalEnv
 insertBind name ptr env =
   env{binds = binds env & Map.insert name ptr}
 
-globBindSet :: String -> Ptr -> Ev ()
+globBindSet :: String -> Ptr -> EvalM ()
 globBindSet name ptr = do
-  modify (\store -> store{globBinds = globBinds store & Map.insert name ptr})
+  modify (\state -> state{globBinds = globBinds state & Map.insert name ptr})
 
-anonSet :: Val -> Ev Ptr
+anonSet :: Val -> EvalM Ptr
 anonSet val = do
   ptr <- alloc ()
   ptrSet ptr val
@@ -137,12 +141,12 @@ evalCon x = case x of
   CString _ string -> VString string
   CUnit _ -> VObjCon "__Unit"
 
-evalToVal :: Exp -> Ev Val
+evalToVal :: Exp -> EvalM Val
 evalToVal exp = do
   ptr <- evalExp exp
   ptrGet ptr
 
-evalExp :: HasCallStack => Exp -> Ev Ptr
+evalExp :: HasCallStack => Exp -> EvalM Ptr
 evalExp exp = case exp of
   ECon _ con ->
     anonSet (evalCon con)
@@ -152,29 +156,15 @@ evalExp exp = case exp of
     asks
       ( \env -> case binds env & Map.lookup id of
           Just x -> x
-          Nothing -> redError $ "internal: undefined symbol '" ++ id ++ "', available: " ++ (binds env & Map.keys & sort & intercalate ", ")
+          Nothing -> error $ "internal: undefined symbol '" ++ id ++ "', available: " ++ (binds env & Map.keys & sort & intercalate ", ")
       )
   ETup _ exp exps -> do
     ptrs <- mapM evalExp (exp : exps)
     anonSet (VTuple ptrs)
   EApp _ fnexp argexp -> do
     argptr <- evalExp argexp
-    -- argval <- ptrGet argptr
-    fnval <- evalToVal fnexp
-    case fnval of
-      VFn (FnVal env f) -> local (const env) (f argptr)
-      VBuiltinFn "__print" -> do
-        s <- printVal argptr
-        liftIO $ putStr s
-        anonSet (VObjCon "__Unit")
-      VBuiltinFn "__raise" -> do
-        s <- printVal argptr
-        fail s
-      _ -> error "internal: illegal application"
-  EIf _ condexp iftexp iffexp -> do
-    condval <- evalToVal condexp
-    let exp = case condval of VObjCon "True" -> iftexp; _ -> iffexp
-    evalExp exp
+    VFn (FnVal env f) <- evalToVal fnexp
+    local (const env) (f argptr)
   ELet _ [LBJust _ (Id xname) yexp] zexp -> do
     xptr <- alloc ()
     ptrSet xptr VRec
@@ -185,32 +175,10 @@ evalExp exp = case exp of
           ptrSet xptr yval
           evalExp zexp
       )
-  EMul _ exp1 exp2 -> evalIntOp exp1 exp2 (*)
-  EDiv _ exp1 exp2 -> evalIntOp exp1 exp2 div
-  EAdd _ exp1 exp2 -> evalIntOp exp1 exp2 (+)
-  ESub _ exp1 exp2 -> evalIntOp exp1 exp2 (-)
-  ECat _ exp1 exp2 -> do
-    [arg1, arg2] <- mapM evalToVal [exp1, exp2]
-    let (VString a) = arg1
-    let (VString b) = arg2
-    anonSet (VString (a ++ b))
-  ERel _ exp1 erelop exp2 -> do
-    arg1 <- evalToVal exp1
-    arg2 <- evalToVal exp2
-    let (VInt a) = arg1
-    let (VInt b) = arg2
-    let f = case erelop of
-          EREq _ -> (==)
-          ERNe _ -> (/=)
-          ERLt _ -> (<)
-          ERLe _ -> (<=)
-          ERGt _ -> (>)
-          ERGe _ -> (>=)
-    anonSet (VObjCon (if f a b then "True" else "False"))
   ECase _ exp ecasebinds -> do
     ptr <- evalExp exp
     let f cases = case cases of
-          [] -> fail "Match_failure"
+          [] -> throwError "Match_failure"
           (pat, exp) : cases' -> do
             match <- matchPat pat ptr
             case match of
@@ -226,7 +194,7 @@ evalExp exp = case exp of
     error "internal: expression unexpected at the interpreter stage"
 
 -- Checks if the value matches the pattern. If yes, returns Map with captured variables.
-matchPat :: Pat -> Ptr -> Ev (Maybe (Map.Map String Ptr))
+matchPat :: Pat -> Ptr -> EvalM (Maybe (Map.Map String Ptr))
 matchPat pat ptr = do
   val <- ptrGet ptr
   case (pat, val) of
@@ -243,15 +211,7 @@ matchPat pat ptr = do
     (PObj _ (IdCap lidcap) pat, VObj ridcap rptr) | lidcap == ridcap -> matchPat pat rptr
     _ -> return Nothing
 
-evalIntOp :: Exp -> Exp -> (Integer -> Integer -> Integer) -> Ev Ptr
-evalIntOp exp1 exp2 f = do
-  arg1 <- evalToVal exp1
-  arg2 <- evalToVal exp2
-  let (VInt a) = arg1
-  let (VInt b) = arg2
-  anonSet (VInt (f a b))
-
-evalDec :: Dec -> Ev ()
+evalDec :: Dec -> EvalM ()
 evalDec dec = case dec of
   DLet p [LBJust _ (Id xname) yexp] -> do
     xptr <- alloc ()
@@ -271,7 +231,7 @@ evalDec dec = case dec of
             ( \dtag -> do
                 let (id, val) = case dtag of
                       DTCon _ (IdCap id) -> (id, VObjCon id)
-                      DTArg _ (IdCap id) _ -> (id, VFn (FnVal emptyEnv (anonSet . VObj id)))
+                      DTArg _ (IdCap id) _ -> (id, VFn (FnVal emptyEvalEnv (anonSet . VObj id)))
                 ptr <- anonSet val
                 globBindSet id ptr
             )
@@ -283,30 +243,52 @@ evalDec dec = case dec of
       ( \exnbind -> do
           let (id, val) = case exnbind of
                 EBCon _ (IdCap id) -> (id, VObjCon id)
-                EBArg _ (IdCap id) _ -> (id, VFn (FnVal emptyEnv (anonSet . VObj id)))
+                EBArg _ (IdCap id) _ -> (id, VFn (FnVal emptyEvalEnv (anonSet . VObj id)))
           ptr <- anonSet val
           globBindSet id ptr
       )
       exnbinds
   DOpen _ idcaps -> do
-    mapM_
-      ( \(IdCap id) -> do
-          s <- liftIO $ readFile ("src/" ++ id ++ ".ml")
-          evalString s
-      )
-      idcaps
+    mapM_ (\(IdCap id) -> evalOpen id) idcaps
   _ -> error "not implemented"
 
-runEv f = do
-  let f' = do
-        p <- anonSet (VBuiltinFn "__print")
-        globBindSet "print" p
-        evalDec $ DOpen Nothing [IdCap "Core"]
-        f
+evalOpen :: String -> EvalM ()
+evalOpen id = do
+  source <- liftIO $ try (readFile ("src/" ++ id ++ ".ml"))
+  case (source :: Either IOError String) of
+    Left exn -> throwError $ "can't load module '" ++ id ++ "': " ++ show exn
+    Right s -> evalString s
 
-  runExceptT (runStateT (runReaderT f' emptyEnv) emptyStore)
+execEvalM :: EvalM () -> EvalState -> ExceptT String IO EvalState
+execEvalM f state = do
+  execStateT (runReaderT f emptyEvalEnv) state
 
-evalString :: String -> Ev ()
+evalEvalM :: EvalM a -> EvalState -> ExceptT String IO a
+evalEvalM f state = do
+  evalStateT (runReaderT f emptyEvalEnv) state
+
+runInitEvalM :: [BuiltinVal] -> ExceptT String IO EvalState
+runInitEvalM builtins = execEvalM (insertBuiltins builtins) emptyEvalState
+
+runEvalDecLst :: [Dec] -> EvalState -> ExceptT String IO EvalState
+runEvalDecLst decs = execEvalM (evalDecLst decs)
+
+insertBuiltins :: [BuiltinVal] -> EvalM ()
+insertBuiltins vals = do
+  mapM_
+    ( \(name, typeStr, val) -> do
+        p <- anonSet val
+        globBindSet name p
+        tState <- gets typeState
+        (Right (_, typeState')) <- liftIO $ runExceptT $ runTypecheckM (insertBuiltinType name typeStr) tState
+        modify (\state -> do state{typeState = typeState'})
+        return ()
+    )
+    vals
+
+  evalOpen "Core"
+
+evalString :: String -> EvalM ()
 evalString s = do
   case (fmap transTree . pListDec . myLexer) s of
     Left x ->
@@ -314,17 +296,25 @@ evalString s = do
     Right x ->
       evalDecLst x
 
-evalDecLst :: [Dec] -> Ev ()
-evalDecLst = mapM_ evalDec
+evalDecLst :: [Dec] -> EvalM ()
+evalDecLst decs = do
+  typeState <- gets typeState
+  typeRet <- liftIO $ runExceptT $ runTypecheckM (typecheckDecLst decs) typeState
+  case typeRet of
+    Left err -> throwError $ "type error: " ++ err
+    Right (_, typeState') -> do
+      modify (\state -> state{typeState = typeState'})
+      mapM_ evalDec decs
 
-printVars :: () -> Ev String
-printVars () = do
-  store <- get
-  ss <-
-    globBinds store & Map.toAscList
-      & mapM
-        ( \(name, ptr) -> do
-            s <- printVal ptr
-            return $ name ++ " = " ++ s
-        )
-  return $ "  globals: { " ++ intercalate ", " ss ++ " }"
+printVars :: EvalM [String]
+printVars = do
+  state <- get
+  typeState <- gets typeState
+  let m = Typecheck.globBinds typeState
+  -- Right (_, typeRet) <- liftIO $ runExceptT $ runTypecheckM () typeState
+  globBinds state & Map.toAscList
+    & mapM
+      ( \(name, ptr) -> do
+          s <- printVal ptr
+          return $ name ++ " : " ++ show (m Map.! name) ++ " = " ++ s
+      )

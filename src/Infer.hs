@@ -2,17 +2,20 @@
 
 module Infer where
 
-import AbsSyntax (Id (Id), IdVar (IdVar), TTupElem' (TTupJust), Typ, Typ' (TFn, TId, TIdVar, TTup), TypLst' (TLEmpty, TLMany, TLOne))
+import AbsSyntax (Id (Id), IdVar (IdVar), TTupElem' (TTupJust), Typ, Typ' (TFn, TId, TIdVar, TTup), TypLst' (TLEmpty, TLMany, TLOne), Exp)
 import Control.Monad.Except (throwError)
 import Data.Foldable (foldlM)
 import Data.Function ((&))
 import Data.List (group, intercalate, nub, sort)
+import Debug.Trace (traceShow, traceShowId)
 import PrintSyntax (printTree)
+import Util (cellNames)
 
 data Type
   = RVar String
   | RTerm [Type] String
 
+-- Convert the type to original tree representation, for printing.
 toAbsTyp :: Type -> Typ
 toAbsTyp = \case
   RVar id -> TIdVar Nothing (IdVar id)
@@ -34,36 +37,34 @@ collectVars = \case
   RVar x -> [x]
   RTerm ts _ -> ts >>= collectVars
 
-niceVarNames :: [String]
-niceVarNames = map (\x -> "'" ++ [x]) ['a' .. 'z']
-
+-- Changes the type to use simple vars 'a, 'b, and so on.
 simplifyVars :: Type -> Type
 simplifyVars t = do
-  let subs = zip (collectVars t & nub) (map RVar niceVarNames)
-  substituteTypes subs t
+  let a = collectVars t & nub
+  let b = cellNames & map ("'__tmp"++) & take (length a)
+  let c = cellNames & map ("'"++) & take (length a)
+  t & substituteTypes (zip a (map RVar b)) & substituteTypes (zip b (map RVar c))
 
+-- Applies substitutions, from right to left.
 substituteTypes :: [(String, Type)] -> Type -> Type
 substituteTypes subs t =
-  foldl
-    ( \t (a, rept) -> case t of
-        RVar x -> if x == a then rept else RVar x
-        RTerm ts x -> RTerm (map (substituteTypes subs) ts) x
-    )
-    t
-    (reverse subs)
+  foldr substituteType t subs
+ where
+  substituteType (a, rep) t = case t of
+    RVar x -> if x == a then rep else RVar x
+    RTerm ts x -> RTerm (map (substituteType (a, rep)) ts) x
 
 -- Type unification algorithm from
 -- https://www.cs.cornell.edu/courses/cs3110/2011sp/Lectures/lec26-type-inference/type-inference.htm
 unifyTypePair :: Type -> Type -> Either String [(String, Type)]
-unifyTypePair a b = do
-  case (a, b) of
-    (RVar idA, RVar idB) -> return [(idB, a) | idA /= idB]
-    (RTerm depsA idA, RTerm depsB idB) -> do
-      if length depsA == length depsB && idA == idB
-        then unifyAll (zip depsA depsB)
-        else throwError $ "expression has type " ++ show b ++ " incompatible with type " ++ show a
-    (RVar id, term) -> idTerm id term
-    (term, RVar id) -> idTerm id term
+unifyTypePair a b = case (a, b) of
+  (RVar idA, RVar idB) -> return [(idB, a) | idA /= idB]
+  (RTerm depsA idA, RTerm depsB idB) -> do
+    if length depsA == length depsB && idA == idB
+      then unifyAll (zip depsA depsB)
+      else throwError $ "expression has type " ++ show b ++ " incompatible with type " ++ show a
+  (RVar id, term) -> idTerm id term
+  (term, RVar id) -> idTerm id term
  where
   idTerm :: String -> Type -> Either String [(String, Type)]
   idTerm id term =

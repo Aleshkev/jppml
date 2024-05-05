@@ -4,37 +4,46 @@
 module Typecheck where
 
 import AbsSyntax
-import Control.Exception (assert)
-import Control.Monad (forM_, zipWithM)
-import Control.Monad.Except (Except, ExceptT, MonadError (throwError), MonadIO (liftIO), runExceptT)
+import AbsUtil (dtagId, dtagTyp, exnBindId, exnBindTyp, letBindExp, letBindId, stringToDecs, typsOfTypLst, fromIdCap)
+import Control.Exception (try)
+import Control.Monad (when)
+import Control.Monad.Except (ExceptT, MonadError (throwError), MonadIO (liftIO))
 import Control.Monad.Reader (MonadReader (local), ReaderT (runReaderT), asks)
 import Control.Monad.State (StateT (runStateT), gets, modify)
 import Data.Either (fromRight)
 import Data.Foldable (foldlM)
 import Data.Function ((&))
-import Data.List (intercalate)
+import Data.List (intercalate, nub)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust, isJust, isNothing)
-import Infer (Type (RTerm, RVar), collectVars, substituteTypes, unifyAll)
+import Data.Maybe (fromJust, isJust, mapMaybe)
+import Infer (Type (RTerm, RVar), collectVars, simplifyVars, substituteTypes, unifyAll)
 import ParSyntax (myLexer, pTyp)
 import PrintSyntax (printTree)
-import Util (ansiDefault, ansiRed)
+import Util (concatMaybesFst)
 
 newtype TypeDec = TypeDec (Map.Map String [Type])
 
 data TypeEnv = TypeEnv
   { binds :: Map.Map String Type
+  , freeBinds :: Map.Map String Type
   }
 
 insertBind :: String -> Type -> TypeEnv -> TypeEnv
 insertBind name typ env =
   env{binds = binds env & Map.insert name typ}
 
-insertBinds :: Map.Map String Type -> TypeEnv -> TypeEnv
-insertBinds t env = foldl (\acc (k, v) -> insertBind k v acc) env (Map.toList t)
+insertFreeBind :: String -> Type -> TypeEnv -> TypeEnv
+insertFreeBind name typ env =
+  env{freeBinds = freeBinds env & Map.insert name typ}
+
+insertBinds :: [(String, Type)] -> TypeEnv -> TypeEnv
+insertBinds t env = foldl (\acc (k, v) -> insertBind k v acc) env t
+
+insertFreeBinds :: [(String, Type)] -> TypeEnv -> TypeEnv
+insertFreeBinds t env = foldl (\acc (k, v) -> insertFreeBind k v acc) env t
 
 emptyTEnv :: TypeEnv
-emptyTEnv = TypeEnv{binds = Map.empty}
+emptyTEnv = TypeEnv{binds = Map.empty, freeBinds = Map.empty}
 
 data TypeStore = TypeStore
   { --Constructors which this type has.
@@ -43,18 +52,18 @@ data TypeStore = TypeStore
     constructorToType :: Map.Map String (Maybe Type, String)
   , globBinds :: Map.Map String Type
   , nextVarI :: Integer
+  , varToExp :: Map.Map String (Maybe Exp)
   }
 
 insertGlobBind :: String -> Type -> TypecheckM ()
 insertGlobBind id t = do
   modify (\state -> state{globBinds = globBinds state & Map.insert id t})
 
-emptyTypeStore :: TypeStore
-emptyTypeStore = TypeStore{types = Map.empty, globBinds = Map.empty, nextVarI = 0, constructorToType = Map.empty}
+insertGlobBinds :: [(String, Type)] -> TypecheckM ()
+insertGlobBinds = mapM_ (uncurry insertGlobBind)
 
--- insertGlobBind :: String -> Type -> TypeStore -> TypeStore
--- insertGlobBind name typ store =
---   store{globBinds = globBinds store & Map.insert name typ}
+emptyTypeStore :: TypeStore
+emptyTypeStore = TypeStore{types = Map.empty, globBinds = Map.empty, nextVarI = 0, constructorToType = Map.empty, varToExp = Map.empty}
 
 type TypecheckM = ReaderT TypeEnv (StateT TypeStore (ExceptT String IO))
 
@@ -67,33 +76,24 @@ runTypecheckDecLst decs store = do
   (_, store') <- runTypecheckM (typecheckDecLst decs) store
   return store'
 
-freshVar :: TypecheckM Type
-freshVar = do
+freshVar :: Maybe Exp -> TypecheckM Type
+freshVar exp = do
   varI <- gets nextVarI
-  modify (\store -> store{nextVarI = varI + 1})
-  return $ RVar ("'__a" ++ show varI)
+  let name = "'__a" ++ show varI
+  modify (\store -> store{nextVarI = varI + 1, varToExp = varToExp store & Map.insert name exp})
+  return $ RVar name
 
 refreshVars :: Type -> TypecheckM Type
 refreshVars t = do
-  subs <-
-    collectVars t
-      & mapM
-        ( \v -> do
-            v' <- freshVar
-            return (v, v')
-        )
-  return $ substituteTypes subs t
+  let a = collectVars t
+  b <- mapM (const $ freshVar Nothing) a
+  return $ t & substituteTypes (zip a b)
 
 typecheckCon :: Con -> TypecheckM Type
 typecheckCon x = case x of
   CInt _ _ -> return $ RTerm [] "int"
   CString _ _ -> return $ RTerm [] "string"
   CUnit _ -> return $ RTerm [] "unit"
-
-letBindId :: LetBind -> Maybe String
-letBindId = \case
-  LBJust _ (Id id) _ -> Just id
-  LBAnon _ _ -> Nothing
 
 typecheckExp :: Exp -> TypecheckM (Type, [(Type, Type)])
 typecheckExp x = case x of
@@ -102,67 +102,54 @@ typecheckExp x = case x of
     return (conT, [])
   EObjCon p (IdCap idcap) -> typecheckExp (EId p (Id idcap))
   EId _ (Id id) -> do
-    t <- asks (\env -> binds env & Map.lookup id)
-    available <- asks (\env -> binds env & Map.keys & intercalate ",")
-    case t of
+    tBound <- asks (\env -> binds env & Map.lookup id)
+    -- available <- asks (\env -> binds env & Map.keys & intercalate ",")
+    case tBound of
       Just t -> do
-        -- TODO: do this only for already resolved types!!
-        -- t' <- refreshVars t
-        return (t, [])
-      Nothing -> throwError $ "undefined symbol '" ++ id ++ "'" ++ ", " ++ available
+        t' <- refreshVars t
+        return (t', [])
+      Nothing -> do
+        tFree <- asks (\env -> freeBinds env & Map.lookup id)
+        case tFree of
+          Just t -> return (t, [])
+          Nothing -> throwError $ "undefined symbol '" ++ id ++ "'"
   ETup _ exp exps -> do
-    t <- freshVar
+    t <- freshVar $ Just x
     ts <- mapM typecheckExp (exp : exps)
     return (t, (t, RTerm (map fst ts) "__tuple") : concatMap snd ts)
   EApp _ exp1 exp2 -> do
-    rett <- freshVar
+    rett <- freshVar $ Just x
     (fnt, fndeps) <- typecheckExp exp1
     (argt, argdeps) <- typecheckExp exp2
     return (rett, (fnt, RTerm [argt, rett] "__fn") : fndeps ++ argdeps)
   ELet _ letbinds exp -> do
-    v <- freshVar
-    boundVars <- mapM (const freshVar) letbinds
-
-    deps <-
+    expT <- freshVar $ Just x
+    valTs <- mapM (const $ freshVar Nothing) letbinds
+    let valBinds = zip (map letBindId letbinds) valTs & mapMaybe (\(a, b) -> (,b) <$> a)
+    bindsAcc <-
       local
-        ( \env ->
-            foldl
-              ( \env (x, y) -> case x of
-                  LBJust _ (Id id) _ -> do
-                    env & insertBind id y
-                  LBAnon _ _ -> env
-              )
-              env
-              (zip letbinds boundVars)
+        (insertFreeBinds valBinds)
+        ( foldlM
+            ( \acc (letbind, bindT) -> do
+                (valT, valAcc) <- typecheckExp (letBindExp letbind)
+                return $ (valT, bindT) : valAcc ++ acc
+            )
+            []
+            (zip letbinds valTs)
         )
-        ( do
-            deps1 <-
-              foldlM
-                ( \acc (letbind, bindT) -> case letbind of
-                    LBJust _ id exp -> do
-                      (valT, valDeps) <- typecheckExp exp
-                      return $ (valT, bindT) : valDeps ++ acc
-                    LBAnon _ exp -> do
-                      (_, valDeps) <- typecheckExp exp
-                      return $ valDeps ++ acc
-                )
-                []
-                (zip letbinds boundVars)
-            (retT, retDeps) <- typecheckExp exp
-            return $ (v, retT) : retDeps ++ deps1
-        )
-    return (v, deps)
+    (innerT, innerAcc) <- local (insertFreeBinds valBinds) (typecheckExp exp)
+    return (expT, (expT, innerT) : innerAcc ++ bindsAcc)
   ECase _ exp ecasebinds -> do
     (argT, argdeps) <- typecheckExp exp
-    retT <- freshVar
+    retT <- freshVar $ Just x
     p <- mapM typecheckECaseBind ecasebinds
     let (patTs, expTs, deps) = unzip3 p
     let makeEqDeps = map (,argT) patTs ++ map (,retT) expTs
     return (retT, makeEqDeps ++ argdeps ++ concat deps)
   EFn _ [Id id] retExp -> do
-    fnT <- freshVar
-    argT <- freshVar
-    (retT, retdeps) <- local (insertBind id argT) (typecheckExp retExp)
+    fnT <- freshVar $ Just x
+    argT <- freshVar $ Just x
+    (retT, retdeps) <- local (insertFreeBind id argT) (typecheckExp retExp)
     return (fnT, (fnT, RTerm [argT, retT] "__fn") : retdeps)
   _ -> error "unexpected expression"
 
@@ -170,34 +157,36 @@ typecheckECaseBind :: ECaseBind -> TypecheckM (Type, Type, [(Type, Type)])
 typecheckECaseBind x = case x of
   ECBJust _ pat exp -> do
     (patT, patBinds, patDeps) <- typecheckPat pat
-    (expT, expDeps) <- local (insertBinds patBinds) (typecheckExp exp)
+    (expT, expDeps) <- local (insertFreeBinds $ Map.toList patBinds) (typecheckExp exp)
     return (patT, expT, patDeps ++ expDeps)
 
+type PatBinds = Map.Map String Type
+
 -- result type, values bound by the pattern match, constraints
-typecheckPat :: Pat -> TypecheckM (Type, Map.Map String Type, [(Type, Type)])
+typecheckPat :: Pat -> TypecheckM (Type, PatBinds, [(Type, Type)])
 typecheckPat x = case x of
   PCon _ con -> do
     conT <- typecheckCon con
     return (conT, Map.empty, [])
   PId _ (Id id) -> do
-    t <- freshVar
+    t <- freshVar Nothing
     return (t, Map.singleton id t, [])
   PWild _ -> do
-    t <- freshVar
+    t <- freshVar Nothing
     return (t, Map.empty, [])
   PTup _ pat pats -> do
     p' <- mapM typecheckPat (pat : pats)
     let (elemTs, binds, deps) = unzip3 p'
-    v <- freshVar
-    binds' <- concatMaps binds
+    v <- freshVar Nothing
+    binds' <- concatPatBinds binds
     return (v, binds', (v, RTerm elemTs "__tuple") : concat deps)
   PObjCon _ (IdCap idcap) -> typecheckPatObj idcap Nothing
   PObj _ (IdCap idcap) pat -> typecheckPatObj idcap (Just pat)
   _ -> error "unexpected pattern"
 
-typecheckPatObj :: String -> Maybe Pat -> TypecheckM (Type, Map.Map String Type, [(Type, Type)])
+typecheckPatObj :: String -> Maybe Pat -> TypecheckM (Type, PatBinds, [(Type, Type)])
 typecheckPatObj idcap usedArgPat = do
-  v <- freshVar
+  v <- freshVar Nothing
   constrT <- gets (\state -> globBinds state & Map.lookup idcap)
   case (constrT, usedArgPat) of
     (Just (RTerm _ "__fn"), Just provArgPat) -> do
@@ -212,120 +201,134 @@ typecheckPatObj idcap usedArgPat = do
     (Just _, Just _) -> throwError $ "constructor '" ++ idcap ++ "' doesn't accept an argument"
     (Nothing, _) -> throwError $ "undefined variant '" ++ idcap ++ "'"
 
-concatMaps :: [Map.Map String Type] -> TypecheckM (Map.Map String Type)
-concatMaps =
-  foldlM
-    ( \acc m -> do
-        forM_
-          (Map.keys m)
-          ( \x -> case acc & Map.lookup x of
-              Just _ -> throwError $ "multiple bindings for '" ++ x ++ "' in a pattern"
-              Nothing -> return ()
-          )
-        return $ acc `Map.union` m
-    )
-    Map.empty
+concatPatBinds :: [PatBinds] -> TypecheckM PatBinds
+concatPatBinds ms = do
+  let keys = concatMap Map.keys ms
+  when (length keys /= length (nub keys)) $ throwError "duplicate bindings in a pattern"
+  return $ foldl Map.union Map.empty ms
 
-typecheckTyp :: Typ -> Type
-typecheckTyp x = case x of
+typToType :: Typ -> Type
+typToType x = case x of
   TIdVar _ (IdVar idvar) -> RVar idvar
   TId _ typlst (Id id) ->
-    RTerm (typecheckTypLst typlst) id
+    RTerm (typLstToTypes typlst) id
   TTup _ typ ttupelems -> do
-    let elemTs = map typecheckTyp (typ : map (\(TTupJust _ x) -> x) ttupelems)
+    let elemTs = map typToType (typ : map (\(TTupJust _ x) -> x) ttupelems)
     RTerm elemTs "__tuple"
   TFn _ typ1 typ2 -> do
-    let ts = map typecheckTyp [typ1, typ2]
+    let ts = map typToType [typ1, typ2]
     RTerm ts "__fn"
 
-typecheckTypLst :: TypLst -> [Type]
-typecheckTypLst x = case x of
+typLstToTypes :: TypLst -> [Type]
+typLstToTypes x = case x of
   TLEmpty _ -> []
-  TLOne _ typ -> map typecheckTyp [typ]
-  TLMany _ typ typs -> map typecheckTyp (typ : typs)
+  TLOne _ typ -> map typToType [typ]
+  TLMany _ typ typs -> map typToType (typ : typs)
+
+typecheckTyp :: Typ -> TypecheckM Type
+typecheckTyp t = do
+  let t' = typToType t
+  -- TODO: check if types are actually defined
+  return t'
 
 typecheckDec :: Dec -> TypecheckM ()
 typecheckDec x = case x of
-  DLet _ [letbind] -> do
-    t <- freshVar
-    exp <- case letbind of
-      LBJust _ (Id id) exp -> do
-        insertGlobBind id t
-        return exp
-      LBAnon _ exp -> return exp
-
-    binds <- gets (\state -> globBinds state & Map.toList & map (\(a, b) -> a ++ ": " ++ show b) & intercalate ", ")
-    liftIO $ putStrLn $ "binds: " ++ binds
-
-    gBinds <- gets globBinds
-    (retT, deps) <- local (\env -> env{binds = gBinds}) (typecheckExp exp)
-
-    liftIO $ putStrLn $ "deps: " ++ show deps
-    let subst = unifyAll deps
-    _ <- case subst of
-      Left s -> liftIO $ putStrLn $ ansiRed ++ s ++ ": " ++ printTree exp ++ ansiDefault
-      Right subst -> do
-        liftIO $ putStrLn $ "subst: " ++ show subst
-        let newRetT = substituteTypes subst retT
-        liftIO $ putStrLn $ "deduced: " ++ show newRetT
-        case letbind of
-          LBJust _ (Id id) _ -> do
-            insertGlobBind id newRetT
-          LBAnon _ _ -> return ()
-
-    return ()
-  DType _ typbinds ->
-    mapM_
-      ( \(TBJust _ typlst (Id typeId) dtags) -> do
-          typeVars <-
-            mapM
-              ( \t -> case t of
-                  TIdVar _ (IdVar x) -> return x
-                  _ -> throwError $ "data type must be parametrized only by type variables"
-              )
-              (transTypLst typlst)
-
-          mapM_
-            ( \dtag -> do
-                let (constrId, constrT) = case dtag of
-                      DTCon _ (IdCap id) -> (id, Nothing)
-                      DTArg _ (IdCap id) typ -> (id, Just (typecheckTyp typ))
-                insertConstructor constrId constrT typeVars typeId
-            )
-            dtags
-      )
-      typbinds
+  DLet _ letbinds -> typecheckDLet letbinds
+  DType _ typbinds -> typecheckDType typbinds
   DExn _ exnbinds -> do
     mapM_
       ( \exnbind -> do
-          let (id, constrT) = case exnbind of
-                EBCon _ (IdCap id) -> (id, Nothing)
-                EBArg _ (IdCap id) typ -> (id, Just (typecheckTyp typ))
-          insertConstructor id constrT [] "__exn"
+          let constrT = typToType <$> exnBindTyp exnbind
+          insertConstructor (exnBindId exnbind) constrT [] "__exn"
       )
       exnbinds
-  DOpen _ idcaps -> return ()
-  _ -> error "unexpected declaration"
+  DOpen _ idcaps -> mapM_ (typecheckDOpen . fromIdCap) idcaps
 
+typecheckDLet :: [LetBind] -> TypecheckM ()
+typecheckDLet letbinds = do
+  let ids = map letBindId letbinds
+  valTs <- mapM (const $ freshVar Nothing) letbinds
+  let valBinds = zip ids valTs & concatMaybesFst
+  gBinds <- gets globBinds
+  -- liftIO $ putStrLn $ "loading: " ++ show ids
+  eqs <-
+    local
+      (\env -> env{binds = gBinds, freeBinds = Map.fromList valBinds})
+      ( foldlM
+          ( \acc (letbind, bindT) -> do
+              (valT, valAcc) <- typecheckExp (letBindExp letbind)
+              return $ (valT, bindT) : valAcc ++ acc
+          )
+          []
+          (zip letbinds valTs)
+      )
+  vte <- gets varToExp
+  -- liftIO $ putStrLn $ "eqs: " ++ (map (\(a, b) -> show a ++ " == " ++ show b) eqs & intercalate "\n")
+  -- liftIO $
+  --   putStrLn $
+  --     "vars: "
+  --       ++ ( concatMap collectVars (map fst eqs ++ map snd eqs) & nub
+  --             & map
+  --               ( \x -> show x ++ " from " ++ maybe "?" printTree (vte Map.! x)
+  --               )
+  --             & intercalate "\n"
+  --          )
+  case unifyAll eqs of
+    Left s -> throwError s
+    Right subst -> do
+      let newValTs = valTs & map (simplifyVars . substituteTypes subst)
+      insertGlobBinds $ zip ids newValTs & concatMaybesFst
+      return ()
+
+typecheckDType :: [TypBind] -> TypecheckM ()
+typecheckDType typbinds = do
+  mapM_
+    ( \(TBJust _ typlst (Id typeId) dtags) -> do
+        typeVars <- typsOfTypLst typlst & mapM getParamVar
+
+        mapM_
+          ( \dtag -> do
+              let constrT = typToType <$> dtagTyp dtag
+              insertConstructor (dtagId dtag) constrT typeVars typeId
+          )
+          dtags
+    )
+    typbinds
+ where
+  getParamVar :: Typ -> TypecheckM String
+  getParamVar (TIdVar _ (IdVar x)) = return x
+  getParamVar _ = throwError "a type can be parametrized only by type variables"
+
+typecheckDOpen :: String -> TypecheckM ()
+typecheckDOpen id = do
+  source <- liftIO $ try (readFile ("src/" ++ id ++ ".ml"))
+  case (source :: Either IOError String) of
+    Left exn -> throwError $ "can't load module '" ++ id ++ "': " ++ show exn
+    Right s -> case stringToDecs s of
+      Left exn -> throwError $ "syntax error in module '" ++ id ++ "': " ++ exn
+      Right decs -> typecheckDecLst decs
+
+-- Inserts a global function or value constructing an object. Does not allow redefinitions.
 insertConstructor :: String -> Maybe Type -> [String] -> String -> TypecheckM ()
 insertConstructor constrId t typeVars typeId = do
+  assertDoesntExist
   let typeVars' = map RVar typeVars
   let constrT = case t of
         Nothing -> RTerm typeVars' typeId
         Just x -> RTerm [x, RTerm typeVars' typeId] "__fn"
   insertGlobBind constrId constrT
   modify (\state -> state{constructorToType = constructorToType state & Map.insert constrId (t, typeId)})
-
-transTypLst x = case x of
-  TLEmpty _ -> []
-  TLOne _ typ -> [typ]
-  TLMany _ typ typs -> typ : typs
+ where
+  assertDoesntExist :: TypecheckM ()
+  assertDoesntExist = do
+    does <- gets (\s -> globBinds s & Map.lookup constrId & isJust)
+    when does $ throwError $ "redefinition of constructor '" ++ typeId ++ "'"
 
 typecheckDecLst :: [Dec] -> TypecheckM ()
 typecheckDecLst = mapM_ typecheckDec
 
 insertBuiltinType :: String -> String -> TypecheckM ()
 insertBuiltinType name spec = do
-  let t = typecheckTyp $ fromRight (error $ "syntax error in builtin type: " ++ show spec) (pTyp $ myLexer spec)
+  let t = typToType $ fromRight (error $ "syntax error in builtin type: " ++ show spec) (pTyp $ myLexer spec)
   insertGlobBind name t
   return ()

@@ -101,4 +101,10 @@ type ('a, 'b) result =
   | Ok of 'a
   | Err of 'b
 
+-- Assertions
 
+exception Assert_failure
+
+let assert = fn x -> case x of
+  | True -> ()
+  | False -> raise Assert_failure

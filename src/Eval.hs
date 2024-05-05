@@ -1,26 +1,30 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Eval where
 
 import ParSyntax
 
 import AbsSyntax
+import AbsUtil (dtagHasArg, dtagId, exnBindHasArg, exnBindId, letBindExp, letBindId, typBindDTags)
 import Control.Exception (try)
 import Control.Monad.Except (ExceptT, MonadError (throwError), runExceptT)
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Either (isLeft)
 import Data.Function (const, (&))
-import Data.List (elem, sort)
+import Data.List (elem, sort, zip)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Ord (Ord)
 import GHC.OldList (intercalate)
 import GHC.Show (Show)
 import GHC.Stack (HasCallStack)
-import Preprocess (transTree)
-import Typecheck (TypeStore, emptyTypeStore, insertBuiltinType, runTypecheckM, typecheckDecLst)
-import qualified Typecheck
-import Util (ansiDefault, ansiRed)
-import Prelude (Bool (False, True), Either (..), Eq ((/=), (==)), IO, IOError, Integer, Integral (div), Monad (return), Num ((*), (-)), Ord ((<), (<=), (>), (>=)), String, all, error, fail, foldr, map, putStr, putStrLn, readFile, show, uncurry, ($), (+), (++), (.))
 import Infer (niceShowType)
+import Preprocess (transTree)
+import Typecheck (TypeStore, emptyTypeStore, insertBuiltinType, runTypecheckM, typecheckDOpen, typecheckDecLst)
+import qualified Typecheck
+import Util (ansiDefault, ansiRed, concatMaybesFst)
+import Prelude (Bool (False, True), Either (..), Eq ((/=), (==)), IO, IOError, Integer, Integral (div), Monad (return), Num ((*), (-)), Ord ((<), (<=), (>), (>=)), String, all, error, fail, foldr, map, not, putStr, putStrLn, readFile, show, uncurry, ($), (+), (++), (.))
 
 data FnVal = FnVal EvalEnv (Ptr -> EvalM Ptr)
 instance Show FnVal where
@@ -103,8 +107,8 @@ type EvalM = ReaderT EvalEnv (StateT EvalState (ExceptT String IO))
 incPtr :: Ptr -> Ptr
 incPtr (Ptr x) = Ptr (x + 1)
 
-alloc :: () -> EvalM Ptr
-alloc () = do
+alloc :: EvalM Ptr
+alloc = do
   ptr <- gets nextPtr
   modify (\state -> state{nextPtr = incPtr ptr})
   return ptr
@@ -131,7 +135,7 @@ globBindSet name ptr = do
 
 anonSet :: Val -> EvalM Ptr
 anonSet val = do
-  ptr <- alloc ()
+  ptr <- alloc
   ptrSet ptr val
   return ptr
 
@@ -156,7 +160,7 @@ evalExp exp = case exp of
     asks
       ( \env -> case binds env & Map.lookup id of
           Just x -> x
-          Nothing -> error $ "internal: undefined symbol '" ++ id ++ "', available: " ++ (binds env & Map.keys & sort & intercalate ", ")
+          Nothing -> error $ "internal: undefined symbol '" ++ id ++ "'"
       )
   ETup _ exp exps -> do
     ptrs <- mapM evalExp (exp : exps)
@@ -166,7 +170,9 @@ evalExp exp = case exp of
     VFn (FnVal env f) <- evalToVal fnexp
     local (const env) (f argptr)
   ELet _ [LBJust _ (Id xname) yexp] zexp -> do
-    xptr <- alloc ()
+    -- TODO: multiple letbinds
+    -- TODO: move things in common with global letbind
+    xptr <- alloc
     ptrSet xptr VRec
     local
       (insertBind xname xptr)
@@ -213,51 +219,46 @@ matchPat pat ptr = do
 
 evalDec :: Dec -> EvalM ()
 evalDec dec = case dec of
-  DLet p [LBJust _ (Id xname) yexp] -> do
-    xptr <- alloc ()
-    ptrSet xptr VRec
-    globBindSet xname xptr
-    gbinds <- gets globBinds
-    local
-      (\env -> env{binds = gbinds})
-      ( do
-          yval <- evalToVal yexp
-          ptrSet xptr yval
-      )
-  DType _ typbinds -> do
-    mapM_
-      ( \(TBJust _ _ _ dtags) -> do
-          mapM_
-            ( \dtag -> do
-                let (id, val) = case dtag of
-                      DTCon _ (IdCap id) -> (id, VObjCon id)
-                      DTArg _ (IdCap id) _ -> (id, VFn (FnVal emptyEvalEnv (anonSet . VObj id)))
-                ptr <- anonSet val
-                globBindSet id ptr
-            )
-            dtags
-      )
-      typbinds
-  DExn _ exnbinds -> do
-    mapM_
-      ( \exnbind -> do
-          let (id, val) = case exnbind of
-                EBCon _ (IdCap id) -> (id, VObjCon id)
-                EBArg _ (IdCap id) _ -> (id, VFn (FnVal emptyEvalEnv (anonSet . VObj id)))
-          ptr <- anonSet val
-          globBindSet id ptr
-      )
-      exnbinds
-  DOpen _ idcaps -> do
-    mapM_ (\(IdCap id) -> evalOpen id) idcaps
-  _ -> error "not implemented"
+  DLet _ letbinds -> evalDLet letbinds
+  DType _ typbinds -> mapM_ evalDType typbinds
+  DExn _ exnbinds -> mapM_ evalDExn exnbinds
+  DOpen _ idcaps -> mapM_ (\(IdCap id) -> evalOpen id) idcaps
+
+evalDLet :: [LetBind] -> EvalM ()
+evalDLet letbinds = do
+  let ids = map letBindId letbinds
+  valPtrs <- mapM (const alloc) letbinds
+  mapM_ (`ptrSet` VRec) valPtrs
+  mapM_ (uncurry globBindSet) (zip ids valPtrs & concatMaybesFst)
+  gBinds <- gets globBinds
+  local
+    (\env -> env{binds = gBinds})
+    ( mapM_
+        ( \(letbind, ptr) -> do
+            yval <- evalToVal $ letBindExp letbind
+            ptrSet ptr yval
+        )
+        (zip letbinds valPtrs)
+    )
+
+evalDType :: TypBind -> EvalM ()
+evalDType (TBJust _ _ (Id typeId) dtags) = do
+  mapM_ (\dtag -> insertConstructor (dtagId dtag) (dtagHasArg dtag) typeId) dtags
+
+evalDExn :: ExnBind -> EvalM ()
+evalDExn exnbind = do
+  insertConstructor (exnBindId exnbind) (exnBindHasArg exnbind) "__exn"
+
+insertConstructor :: String -> Bool -> String -> EvalM ()
+insertConstructor constrId hasArg typeId = do
+  let val = if not hasArg then VObjCon typeId else VFn (FnVal emptyEvalEnv (anonSet . VObj typeId))
+  ptr <- anonSet val
+  globBindSet constrId ptr
 
 evalOpen :: String -> EvalM ()
 evalOpen id = do
-  source <- liftIO $ try (readFile ("src/" ++ id ++ ".ml"))
-  case (source :: Either IOError String) of
-    Left exn -> throwError $ "can't load module '" ++ id ++ "': " ++ show exn
-    Right s -> evalString s
+  (Right s) <- (liftIO $ try (readFile ("src/" ++ id ++ ".ml"))) :: EvalM (Either IOError String)
+  evalString s
 
 execEvalM :: EvalM () -> EvalState -> ExceptT String IO EvalState
 execEvalM f state = do
@@ -285,6 +286,12 @@ insertBuiltins vals = do
         return ()
     )
     vals
+
+  tState <- gets typeState
+  coreOk <- liftIO $ runExceptT $ runTypecheckM (typecheckDOpen "Core") tState
+  case coreOk of
+    Left err -> throwError $ "when loading 'Core':" ++ err
+    Right _ -> return ()
 
   evalOpen "Core"
 
@@ -316,5 +323,5 @@ printVars = do
     & mapM
       ( \(name, ptr) -> do
           s <- printVal ptr
-          return $ name ++ " : " ++ show (m Map.! name) ++ " = " ++ s
+          return $ name ++ " : " ++ niceShowType (m Map.! name) ++ " = " ++ s
       )

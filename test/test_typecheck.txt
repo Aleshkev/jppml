@@ -1,0 +1,79 @@
+
+-- These tests check if the *type* matches.
+
+-- int 
+let x = 1
+let x = 1 + 2 * 3 / 1 - 1 + (-7)
+let x = 1 + "2" #
+
+-- string
+let x = "s"
+let x = "Hello, " ^ "world"
+let x = "a" + "b" #
+let x = "a" @ "b" #
+
+-- unit
+let x = ()
+let x = ignore [1, 2, 3]
+let x = ignore [1, 2, "3"] #
+let x = assert (2 + 2 == 4)
+let x = (fn x -> ()) ()
+
+-- int list
+let x = [1]
+let x = [1, 2, 3]
+let x = [1, 2, 3] @ []
+let x = [] @ [1, 2, 3] @ []
+let x = [1, 2] @ [3]
+let x = 1 :: x
+let x = [1, 2, "a"] #
+
+-- 'a list list
+let x = [[]]
+let x = [[], []]
+let x = [] :: []
+
+-- int list list
+let x = [[], [2]]
+
+-- 'a list list list
+let x = [[], [[]]]
+let x = [[[]]]
+let x = [[[], []], [[], []]]
+
+-- 'a list
+let x = []
+let x = x @ x
+
+let x = [] and y = [1] and z = ["a"]
+let x = [] and y = 1 :: x and z = "a" :: x #
+
+
+-- 'a
+let x = x
+
+-- Some int
+let x = Some 1
+
+let x = Some (Some 2)
+
+let x = Some (Some (Some 3))
+
+-- 'a -> 'a
+let id = fn x -> x 
+let id = fn x -> case Some x of Some x -> x
+let id = fn x -> case [x] of [x] -> x
+let id = fn x -> case (x, x, 1) of (x, _, 1) -> x
+let id = fn x -> case (x, x, 1) of (x, x, 1) -> x #
+let id = fn x -> case (x, x, 1) of (x, _, "a") -> x #
+
+-- 'a -> 'b
+let f = fn x -> raise 0
+let f = fn x -> raise x
+
+let apply = fn x f -> f x
+
+
+let x = let f x = ignore x in (f 1, f "a") #
+
+let x = let a = [] in (1 :: a, "" :: a) #

@@ -14,6 +14,7 @@ import Data.Function ((&))
 import Data.List (intercalate)
 import qualified Data.Set as Set
 import Core (builtinVals)
+import Control.Monad (when)
 
 
 inputLine :: [Dec] -> EvalState -> IO EvalState
@@ -46,7 +47,7 @@ repl' store = do
         (Right vars) <- runExceptT $ evalEvalM printVars store
         (Right vars') <- runExceptT $ evalEvalM printVars store'
         let newVars = (Set.fromList vars' Set.\\ Set.fromList vars) & Set.toAscList & intercalate "\n"
-        liftIO $ putStrLn $ ansiMagenta ++ (if newVars /= "" then newVars else "  -") ++ ansiDefault 
+        when (newVars /= "") $ liftIO $ putStrLn $ ansiMagenta ++ newVars ++ ansiDefault 
 
         repl' store'
 

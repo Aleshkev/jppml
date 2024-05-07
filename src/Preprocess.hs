@@ -1,30 +1,19 @@
 module Preprocess where
 
-import ParSyntax
-import LexSyntax
-
-
-import qualified Data.Map as Map
-import Data.Map((!))
-import GHC.Show (Show)
-import Prelude (($), Either(..), String, (++), Show, show, Int, Ord, Eq, Integer, fail, map, error, id, reverse)
 import AbsSyntax
-import Data.Ord (Ord)
-
-
+import GHC.Show (Show)
+import Prelude (String, error, map, reverse, ($))
 
 transTree :: [Dec] -> [Dec]
-transTree decs =
-  map transDec decs
+transTree = map transDec
 
-
-transExp :: Show a => Exp' a -> Exp' a 
+transExp :: Show a => Exp' a -> Exp' a
 transExp x = case x of
   ECon p con -> ECon p con
   EObjCon p idcap -> EObjCon p idcap
   EId p id -> EId p id
   ETup p exp exps -> ETup p (transExp exp) (map transExp exps)
-  ELst p exps -> case exps of 
+  ELst p exps -> case exps of
     [] -> EObjCon p (IdCap "__Empty")
     exp : exps' -> transExp $ ECons p (transExp exp) (transExp $ ELst p exps')
   EApp p exp1 exp2 -> EApp p (transExp exp1) (transExp exp2)
@@ -36,7 +25,7 @@ transExp x = case x of
   ECons p exp1 exp2 -> repWithFn p "__cons" [exp1, exp2]
   EAppend p exp1 exp2 -> repWithFn p "__append" [exp1, exp2]
   ECat p exp1 exp2 -> repWithFn p "__cat" [exp1, exp2]
-  ERel p exp1 erelop exp2 -> do 
+  ERel p exp1 erelop exp2 -> do
     let op = case erelop of
           EREq _ -> "__eq"
           ERNe _ -> "__ne"
@@ -54,12 +43,12 @@ transExp x = case x of
     [] -> error "a function must have at least one argument"
     [id] -> EFn p [id] (transExp exp)
     id : ids_ -> EFn p [id] (transExp $ EFn p ids_ exp)
-  where
-    repWithFn :: Show a => a -> String -> [Exp' a] -> Exp' a
-    repWithFn p fname exps = 
-      case reverse exps of 
+ where
+  repWithFn :: Show a => a -> String -> [Exp' a] -> Exp' a
+  repWithFn p fname exps =
+    case reverse exps of
       [] -> EId p (Id fname)
-      exp : exps_ -> EApp p (repWithFn p fname (reverse exps_)) (transExp exp) 
+      exp : exps_ -> EApp p (repWithFn p fname (reverse exps_)) (transExp exp)
 
 transECaseBind :: Show a => ECaseBind' a -> ECaseBind' a
 transECaseBind x = case x of
@@ -78,49 +67,13 @@ transPat x = case x of
   PObj p idcap pat -> PObj p idcap (transPat pat)
   PCons p pat1 pat2 -> PObj p (IdCap "__Cons") (PTup p (transPat pat1) [transPat pat2])
 
-transTyp :: Show a => Typ' a -> Typ' a
-transTyp x = case x of
-  -- TIdVar _ idvar -> failure x
-  -- TId p typlst id -> TId p (transTypLst typlst) id
-  -- TTup p typ ttupelems -> TTup p 
-  -- TFn p typ1 typ2 -> failure x
-  x -> x
-
-transTypLst :: Show a => TypLst' a -> TypLst' a
-transTypLst = id
--- transTypLst x = case x of
---   TLEmpty p -> transTypLst $ TLMany p (Typ' a) ([Typ' a])
---   TLOne _ typ -> failure x
---   TLMany p typ typs -> TLMany p (transTyp typ) (map transTyp typs)
-
-transTTupElem :: Show a => TTupElem' a -> TTupElem' a
-transTTupElem x = case x of
-  TTupJust p typ -> TTupJust p (transTyp typ)
-
 transDec :: Show a => Dec' a -> Dec' a
 transDec x = case x of
   DLet p letbinds -> DLet p (map transLetBind letbinds)
-  DType p typbinds -> DType p (map transTypBind typbinds)
-  -- DExn p exnbinds -> DExn p (map transExnBind exnbinds)
-  -- DExn p exnbinds -> error "Not implemented"
-  DOpen p idcaps -> DOpen p idcaps
   x -> x
 
 transLetBind :: Show a => LetBind' a -> LetBind' a
 transLetBind x = case x of
   LBJust p id exp -> LBJust p id (transExp exp)
-  LBAnon p exp -> transLetBind $ LBJust p (Id "__x") exp
-
-transTypBind :: Show a => TypBind' a -> TypBind' a
-transTypBind x = case x of
-  TBJust p typlst id dtags -> TBJust p (transTypLst typlst) id (map transDTag dtags)
-
-transDTag :: Show a => DTag' a -> DTag' a
-transDTag x = case x of
-  DTCon p idcap -> DTCon p idcap
-  DTArg p idcap typ -> DTArg p idcap (transTyp typ)
-
--- transExnBind :: Show a => ExnBind' a -> ExnBind' a
--- transExnBind x = case x of
---   EBCon _ idcap -> failure x
---   EBArg _ idcap typ -> failure x
+  -- LBAnon p exp -> transLetBind $ LBJust p (Id "__anon") exp
+  LBAnon p exp -> LBAnon p (transExp exp)

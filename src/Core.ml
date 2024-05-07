@@ -20,10 +20,6 @@ type 'a option =
   | None
   | Some of 'a
 
-let value = fn o default -> case o of Some x -> x | None -> default
-let get = fn o -> case o of Some x -> x | None -> invalid_arg "option is None"
-
-
 type bool = True | False
 
 -- Comparisons
@@ -33,7 +29,7 @@ type bool = True | False
 
 -- let __lt = fn x y -> __magicRelOp ("lt", x, y)
 
--- let min = fn a b -> if a < b then a else b
+let min = fn a b -> if a < b then a else b
 let max = fn a b -> if a > b then a else b
 
 -- Boolean operations
@@ -41,6 +37,8 @@ let max = fn a b -> if a > b then a else b
 let not = fn x -> case x of
   | True -> False
   | False -> True
+
+let __ne = fn a b -> not (a == b)
 
 let __and = fn x fy ->
   if x then fy () else False
@@ -62,6 +60,16 @@ let abs = fn x -> if x < 0 then -x else x
 
 let ignore = fn x -> ()
 
+-- Function combinators.
+
+let id = fn x -> x
+let const = fn a b -> a
+let flip = fn f a b -> f b a
+let negate = fn f x -> not (f x)
+let curry = fn f x -> case x of (a, b) -> f a b
+let uncurry = fn f a b -> f (a, b)
+let combine = fn g f x -> g (f x)
+
 -- String conversion functions.
 
 let cat = fn a b -> a ^ b
@@ -76,24 +84,25 @@ let bool_of_string = fn x -> case x of
 let fst = fn x -> case x of (a, _) -> a
 let snd = fn x -> case x of (_, b) -> b
 
--- let __if = fn x ifT ifF -> __magicIf (x, ifT, ifF)
-
-
 -- List operations
 
 type 'a list = __Empty | __Cons of 'a * 'a list
 
 let __cons = fn x y -> __Cons (x, y)
-let cons = __cons
 
 let __append = fn a b -> case a of
   | h :: t -> h :: __append t b
   | [] -> b
-let append = __append
+
+let map = fn f l -> case l of 
+  | [] -> []
+  | x :: l' -> (f x) :: map f l'
 
 -- Input / output
 
-let print_endline = fn s -> print (s ^ "\n")
+let print = fn x -> print_string (to_string x)
+let print_endline = fn s -> print_string (s ^ "\n")
+let print_int = fn x -> print (x + 0)
 
 -- Result type
 

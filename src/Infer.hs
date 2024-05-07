@@ -1,19 +1,24 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 module Infer where
 
-import AbsSyntax (Id (Id), IdVar (IdVar), TTupElem' (TTupJust), Typ, Typ' (TFn, TId, TIdVar, TTup), TypLst' (TLEmpty, TLMany, TLOne), Exp)
+import AbsSyntax (BNFC'Position, Id (Id), IdVar (IdVar), TTupElem' (TTupJust), Typ, Typ' (TFn, TId, TIdVar, TTup), TypLst' (TLEmpty, TLMany, TLOne))
 import Control.Monad.Except (throwError)
 import Data.Foldable (foldlM)
 import Data.Function ((&))
-import Data.List (group, intercalate, nub, sort)
-import Debug.Trace (traceShow, traceShowId)
+import Data.List (nub)
 import PrintSyntax (printTree)
 import Util (cellNames)
+
+type Src = BNFC'Position
 
 data Type
   = RVar String
   | RTerm [Type] String
+  deriving Eq
+
+type TypeEq = (Type, Type, Src)
 
 -- Convert the type to original tree representation, for printing.
 toAbsTyp :: Type -> Typ
@@ -41,9 +46,10 @@ collectVars = \case
 simplifyVars :: Type -> Type
 simplifyVars t = do
   let a = collectVars t & nub
-  let b = cellNames & map ("'__tmp"++) & take (length a)
-  let c = cellNames & map ("'"++) & take (length a)
+  let b = cellNames & map ("'__tmp" ++) & take (length a)
+  let c = cellNames & map ("'" ++) & take (length a)
   t & substituteTypes (zip a (map RVar b)) & substituteTypes (zip b (map RVar c))
+
 
 -- Applies substitutions, from right to left.
 substituteTypes :: [(String, Type)] -> Type -> Type
@@ -56,29 +62,29 @@ substituteTypes subs t =
 
 -- Type unification algorithm from
 -- https://www.cs.cornell.edu/courses/cs3110/2011sp/Lectures/lec26-type-inference/type-inference.htm
-unifyTypePair :: Type -> Type -> Either String [(String, Type)]
-unifyTypePair a b = case (a, b) of
+unifyTypePair :: TypeEq -> Either (String, Src) [(String, Type)]
+unifyTypePair (a, b, p) = case (a, b) of
   (RVar idA, RVar idB) -> return [(idB, a) | idA /= idB]
   (RTerm depsA idA, RTerm depsB idB) -> do
     if length depsA == length depsB && idA == idB
-      then unifyAll (zip depsA depsB)
-      else throwError $ "expression has type " ++ show b ++ " incompatible with type " ++ show a
-  (RVar id, term) -> idTerm id term
-  (term, RVar id) -> idTerm id term
+      then unifyAll (zip3 depsA depsB (repeat p))
+      else throwError ("expression has type " ++ niceShowType b ++ " incompatible with type " ++ niceShowType a, p)
+  (RVar id, term) -> idTerm id term p
+  (term, RVar id) -> idTerm id term p
  where
-  idTerm :: String -> Type -> Either String [(String, Type)]
-  idTerm id term =
-    if occurs id term then throwError $ "type " ++ id ++ " is cyclic" else return [(id, term)]
+  idTerm :: String -> Type -> Src -> Either (String, Src) [(String, Type)]
+  idTerm id term p =
+    if occurs id term then throwError ("type " ++ id ++ " is cyclic", p) else return [(id, term)]
 
   occurs varId term = case term of
     RVar x -> x == varId
     RTerm xs _ -> any (occurs varId) xs
 
-unifyAll :: [(Type, Type)] -> Either String [(String, Type)]
+unifyAll :: [TypeEq] -> Either (String, Src) [(String, Type)]
 unifyAll =
   foldlM
-    ( \acc (a, b) -> do
-        ps <- unifyTypePair (substituteTypes acc a) (substituteTypes acc b)
+    ( \acc (a, b, p) -> do
+        ps <- unifyTypePair (substituteTypes acc a, substituteTypes acc b, p)
         return $ ps ++ acc
     )
     []

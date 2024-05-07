@@ -14,3 +14,17 @@ cabal run
 bnfc -m --functor Syntax.cf
 make
 ```
+
+## Source code
+
+Most important files:
+- [Syntax.cf](src/Syntax.cf) – syntax of the language
+- [Preprocess.hs](src/Preprocess.hs) – preprocessor
+- [Typecheck.hs](src/Typecheck.hs) – type checker
+- [Infer.hs](src/Typecheck.hs) – type inference
+- [Eval.hs](src/Eval.hs) – interpreter
+
+Standard library:
+- [Core.hs](src/Core.hs)
+- [Core.ml](src/Core.ml)
+- [List.ml](src/List.ml)

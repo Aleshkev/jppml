@@ -1,21 +1,23 @@
 -- This module is for testing only. Code is uglier than in main files.
 module Main (main) where
 
+import AbsUtil (stringToDecs)
 import Control.Monad
 import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (liftIO)
 import Core (builtinVals)
 import Data.Either (isRight, rights)
 import Data.Function
-import Data.List (intercalate, isInfixOf, isPrefixOf)
+import Data.List (intercalate, isInfixOf, isPrefixOf, sort)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
-import Eval (EvalState (typeState), runInitEvalM)
+import Eval (EvalState (typeState), emptyEvalState, evalDecLst, evalString, insertBuiltins, printVars, runEvalM)
 import ParSyntax
 import Preprocess (transTree)
 import PrintSyntax (printTree)
+import System.Directory (getDirectoryContents, listDirectory)
 import System.Exit (exitFailure)
-import Typecheck (TypeStore (globBinds), runTypecheckM, typecheckDecLst)
+import Typecheck (TypeState (globBinds), runTypecheckM, typecheckDecLst)
 import Util
 
 groupLines :: [String] -> [[String]]
@@ -85,21 +87,51 @@ getType s = do
     Left x -> return $ Left x
     Right decs -> do
       -- liftIO $ runExceptT $ runTypecheckM (typecheckDOpen "Core") tState
-      (Right evalState) <- runExceptT $ runInitEvalM builtinVals
+      (Right (_, evalState)) <- runEvalM (insertBuiltins builtinVals) emptyEvalState
       let ts = typeState evalState
-      typeRet <- liftIO $ runExceptT $ runTypecheckM (typecheckDecLst decs) ts
+      typeRet <- liftIO $ runTypecheckM (typecheckDecLst decs) ts
       case typeRet of
-        Left err -> return $ Left $ "type error: " ++ err
+        Left (err, _) -> return $ Left $ "type error: " ++ err
         Right (_, typeState) -> do
           let a = globBinds ts
           let b = globBinds typeState
           let c = b Map.\\ a
           return $ Right $ c & Map.toAscList & map (\(a, b) -> a ++ " : " ++ show b) & intercalate " ; "
 
+getVal :: String -> IO (Either String String)
+getVal s = do
+  (Right (_, evalState)) <- runEvalM (insertBuiltins builtinVals) emptyEvalState
+  (Right (vars, _)) <- runEvalM printVars evalState
+
+  ret <- runEvalM (evalString s) evalState
+  case ret of
+    Left err -> return $ Left err
+    Right (_, evalState') -> do
+      (Right (vars', _)) <- runEvalM printVars evalState'
+      return $ Right $ diffLines vars vars' & unlines
+
+doLongTests :: IO ()
+doLongTests = do
+  ok <- listDirectory "good" & fmap sort
+  mapM_
+    ( ( \file -> do
+          s <- readFile file
+          v <- getVal s
+          case v of
+            Left err -> putStrLn $ ansiRed ++ "error when executing " ++ show file ++ ": " ++ err ++ ansiDefault
+            Right _ -> putStrLn $ ansiGreen ++ "executed " ++ show file ++ ansiDefault
+          return ()
+      )
+        . ("good/" ++)
+    )
+    ok
+
 main :: IO ()
 main = do
   doTest "test/test_grammar.txt" (return . pListDec . myLexer) id printTree
-  doTest "test/test_preprocessor.txt" (return . fmap transTree . pListDec . myLexer) id printTree
+  doTest "test/test_preprocessor.txt" (return . stringToDecs) id printTree
   doTest "test/test_typecheck.txt" getType id id
+  doTest "test/test_interpreter.txt" getVal id id
+  doLongTests
 
   exitFailure

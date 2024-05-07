@@ -4,6 +4,9 @@ module Util where
 
 import Data.Function ((&))
 import Data.Maybe (mapMaybe)
+import qualified Data.Set as Set
+import Data.List (nub)
+import System.IO (stderr, hPutStrLn)
 
 ansiDefault :: String
 ansiDefault = "\ESC[0m"
@@ -44,5 +47,14 @@ cellNames =
   f 1 = az
   f n = concatMap (\x -> map (x ++) (f $ n - 1)) az
 
-concatMaybesFst :: [(Maybe a, b)] -> [(a, b)]
-concatMaybesFst = mapMaybe (\(a, b) -> (,b) <$> a)
+catMaybesFst :: [(Maybe a, b)] -> [(a, b)]
+catMaybesFst = mapMaybe (\(a, b) -> (,b) <$> a)
+
+diffLines :: [String] -> [String] -> [String]
+diffLines old new = Set.fromList new Set.\\ Set.fromList old & Set.toAscList
+
+existDuplicates :: Eq a => [a] -> Bool
+existDuplicates l = length (nub l) /= length l
+
+putStrLnErr :: String -> IO ()
+putStrLnErr = hPutStrLn stderr

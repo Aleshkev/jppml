@@ -47,5 +47,5 @@ test-suite jppml-test
     hs-source-dirs:   test
     main-is:          Main.hs
     build-depends:
-        base ^>=4.12.0.0,  containers, array, text, mtl,
+        base ^>=4.12.0.0,  containers, array, text, mtl, directory,
         jppml

@@ -1,10 +1,11 @@
 module Core where
 
+import Control.Monad (when)
 import Control.Monad.Cont (liftIO)
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (local)
 import Control.Monad.State (gets)
-import Eval (BuiltinVal, EvalM, EvalState (typeState), FnVal (FnVal), Ptr, Val (VFn, VInt, VObjCon, VString), anonSet, boolToVal, emptyEvalEnv, printVal, ptrGet, valToBool)
+import Eval (BuiltinVal, EvalM, EvalState (typeState), FnVal (FnVal), Ptr, Val (VFn, VInt, VObjCon, VString), anonSet, boolToVal, emptyEvalEnv, eqVal, printVal, ptrGet, valToBool)
 import Infer (niceShowType)
 import qualified Typecheck
 
@@ -35,11 +36,11 @@ makeRelFn op = makeValBinFn (\(VInt a) (VInt b) -> return $ boolToVal $ op a b)
 builtinVals :: [BuiltinVal]
 builtinVals =
   [
-    ( "print"
-    , "'a -> unit"
+    ( "print_string"
+    , "string -> unit"
     , makeFn
         ( \argptr -> do
-            s <- printVal argptr
+            (VString s) <- ptrGet argptr
             liftIO $ putStr s
             anonSet (VObjCon "__Unit")
         )
@@ -66,9 +67,24 @@ builtinVals =
   , ("__add", "int -> int -> int", makeIntBinFn (+))
   , ("__sub", "int -> int -> int", makeIntBinFn (-))
   , ("__mul", "int -> int -> int", makeIntBinFn (*))
-  , ("__div", "int -> int -> int", makeIntBinFn div)
-  , ("__eq", "int -> int -> bool", makeRelFn (==))
-  , ("__ne", "int -> int -> bool", makeRelFn (/=))
+  ,
+    ( "__div"
+    , "int -> int -> int"
+    , makeValBinFn
+        ( \(VInt a) (VInt b) -> do
+            when (b == 0) $ throwError "Division_by_zero"
+            return $ VInt $ a `div` b
+        )
+    )
+  ,
+    ( "__eq"
+    , "'a -> 'a -> bool"
+    , makeBinFn
+        ( \a b -> do
+            eq <- eqVal a b
+            anonSet $ boolToVal eq
+        )
+    )
   , ("__lt", "int -> int -> bool", makeRelFn (<))
   , ("__le", "int -> int -> bool", makeRelFn (<=))
   , ("__gt", "int -> int -> bool", makeRelFn (>))

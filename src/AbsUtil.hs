@@ -7,6 +7,12 @@ import Data.Function ((&))
 import Data.Maybe (isJust)
 import ParSyntax (myLexer, pListDec)
 import Preprocess (transTree)
+import AbsSyntax (BNFC'Position)
+
+printPosition :: BNFC'Position -> String
+printPosition = \case
+  Just (line, col) -> "line " ++ show line ++ ", column " ++ show col
+  Nothing -> "unknown position"
 
 fromIdCap :: IdCap -> String
 fromIdCap (IdCap id) = id

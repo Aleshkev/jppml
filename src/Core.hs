@@ -5,7 +5,7 @@ import Control.Monad.Cont (liftIO)
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (local)
 import Control.Monad.State (gets)
-import Eval (BuiltinVal, EvalM, EvalState (typeState), FnVal (FnVal), Ptr, Val (VFn, VInt, VObjCon, VString), anonSet, boolToVal, emptyEvalEnv, eqVal, printVal, ptrGet, valToBool)
+import Eval (BuiltinVal, EvalM, EvalState (typeState), FnVal (FnVal), Ptr, Val (VFn, VInt, VObjCon, VString), newPtrWith, boolToVal, emptyEvalEnv, eqVal, printVal, ptrGet, valToBool)
 import Infer (niceShowType)
 import qualified Typecheck
 
@@ -13,10 +13,10 @@ makeFn :: (Ptr -> EvalM Ptr) -> Val
 makeFn f = VFn $ FnVal emptyEvalEnv f
 
 makeBinFn :: (Ptr -> Ptr -> EvalM Ptr) -> Val
-makeBinFn f = makeFn (anonSet . makeFn . f)
+makeBinFn f = makeFn (newPtrWith . makeFn . f)
 
 makeTernFn :: (Ptr -> Ptr -> Ptr -> EvalM Ptr) -> Val
-makeTernFn f = makeFn (\ptr1 -> anonSet $ makeFn (anonSet . makeFn . f ptr1))
+makeTernFn f = makeFn (\ptr1 -> newPtrWith $ makeFn (newPtrWith . makeFn . f ptr1))
 
 makeValBinFn :: (Val -> Val -> EvalM Val) -> Val
 makeValBinFn f =
@@ -24,7 +24,7 @@ makeValBinFn f =
     ( \ptr1 ptr2 -> do
         [val1, val2] <- mapM ptrGet [ptr1, ptr2]
         ret <- f val1 val2
-        anonSet ret
+        newPtrWith ret
     )
 
 makeIntBinFn :: (Integer -> Integer -> Integer) -> Val
@@ -42,7 +42,7 @@ builtinVals =
         ( \argptr -> do
             (VString s) <- ptrGet argptr
             liftIO $ putStr s
-            anonSet (VObjCon "__Unit")
+            newPtrWith (VObjCon "__Unit")
         )
     )
   ,
@@ -51,7 +51,7 @@ builtinVals =
     , makeFn
         ( \argptr -> do
             s <- printVal argptr
-            anonSet (VString s)
+            newPtrWith (VString s)
         )
     )
   ,
@@ -82,7 +82,7 @@ builtinVals =
     , makeBinFn
         ( \a b -> do
             eq <- eqVal a b
-            anonSet $ boolToVal eq
+            newPtrWith $ boolToVal eq
         )
     )
   , ("__lt", "int -> int -> bool", makeRelFn (<))
@@ -96,7 +96,7 @@ builtinVals =
         ( \ptr1 ptr2 ptr3 -> do
             [arg1, arg2, arg3] <- mapM ptrGet [ptr1, ptr2, ptr3]
             let VFn (FnVal env f) = if valToBool arg1 then arg2 else arg3
-            u <- anonSet (VObjCon "__Unit")
+            u <- newPtrWith (VObjCon "__Unit")
             local (const env) (f u)
         )
     )

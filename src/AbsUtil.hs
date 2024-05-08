@@ -7,7 +7,12 @@ import Data.Function ((&))
 import Data.Maybe (isJust)
 import ParSyntax (myLexer, pListDec)
 import Preprocess (transTree)
-import AbsSyntax (BNFC'Position)
+import AbsSyntax (BNFC'Position, HasPosition)
+
+type Src = BNFC'Position
+
+srcOf :: HasPosition a => a -> Src
+srcOf = hasPosition
 
 printPosition :: BNFC'Position -> String
 printPosition = \case
@@ -23,6 +28,15 @@ fromId (Id id) = id
 stringToDecs :: String -> Either String [Dec]
 stringToDecs = fmap transTree . pListDec . myLexer
 
+tTupElems :: [TTupElem] -> [Typ]
+tTupElems = map (\(TTupJust _ t) -> t)
+
+typLstToTyps :: TypLst -> [Typ]
+typLstToTyps = \case
+  TLEmpty _ -> []
+  TLOne _ typ -> [typ]
+  TLMany _ typ typs -> typ : typs
+
 exnBindId :: ExnBind -> String
 exnBindId = \case
   EBCon _ (IdCap id) -> id
@@ -35,6 +49,14 @@ exnBindTyp = \case
 
 exnBindHasArg :: ExnBind -> Bool
 exnBindHasArg x = exnBindTyp x & isJust
+
+typBindTypLst :: TypBind -> TypLst 
+typBindTypLst = \case
+  TBJust _ typlst _ _ -> typlst
+
+typBindId :: TypBind -> String
+typBindId = \case
+  TBJust _ _ (Id id) _ -> id
 
 typBindDTags :: TypBind -> [DTag]
 typBindDTags = \case

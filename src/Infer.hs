@@ -1,17 +1,13 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
-
 module Infer where
 
-import AbsSyntax (BNFC'Position, Id (Id), IdVar (IdVar), TTupElem' (TTupJust), Typ, Typ' (TFn, TId, TIdVar, TTup), TypLst' (TLEmpty, TLMany, TLOne))
+import AbsSyntax (Id (Id), IdVar (IdVar), TTupElem' (TTupJust), Typ, Typ' (TFn, TId, TIdVar, TTup), TypLst' (TLEmpty, TLMany, TLOne))
 import Control.Monad.Except (throwError)
 import Data.Foldable (foldlM)
 import Data.Function ((&))
 import Data.List (nub)
 import PrintSyntax (printTree)
 import Util (cellNames)
-
-type Src = BNFC'Position
+import AbsUtil (Src)
 
 data Type
   = RVar String

@@ -76,7 +76,7 @@ let apply = fn x f -> f x
 
 let x = let f x = ignore x in (f 1, f "a") #
 
-let x = let a = [] in (1 :: a, "" :: a) #
+let x = let a = [] in (1 :: a, "" :: a)   let a = []
 let a = []   let x = (1 :: a, "" :: a)
 
 let x = 2 == 3
@@ -89,10 +89,16 @@ let _ = let x = 1 and x = 2 in x #
 
 let _ = case (2, 3) of (x, x) -> 0 #
 
+let f = fn x -> case x of 1 -> 7 | "a" -> 7 #
+let f = fn x -> case x of 1 -> 7 | 2 -> "b" #
+
 open Sdfls #
 
 type f = One   type f = Two #
+type f = One and f = Two #
+
 type f = One   type g = One #
+type f = One and type g = One #
 
 type f = One of sfsd #
 type f = One of 'a #
@@ -100,3 +106,20 @@ type 'a f = One of 'a sfsd #
 
 type f = One of list #
 type ('a, 'b) f = One of ('a, 'b) list #
+
+type f = One of sdfl #
+
+type f = One of 'a list #
+
+type f = One of int -> int -> string
+
+type f = One of int -> int -> unit
+
+type 'a f = One of 'a -> 'a
+type f = One of 'a -> 'a #
+
+type ('a, 'b) f = One of 'a -> 'a
+type ('a, 'b) f = One of 'a -> 'sdf #
+
+type f = One of int * int * string
+

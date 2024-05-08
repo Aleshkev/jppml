@@ -1,5 +1,3 @@
-{-# LANGUAGE TupleSections #-}
-
 module Util where
 
 import Data.Function ((&))
@@ -58,3 +56,6 @@ existDuplicates l = length (nub l) /= length l
 
 putStrLnErr :: String -> IO ()
 putStrLnErr = hPutStrLn stderr
+
+foldInserter :: (String -> a -> b -> b) -> ([(String, a)] -> b -> b)
+foldInserter f t env = foldl (\acc (k, v) -> f k v acc) env t

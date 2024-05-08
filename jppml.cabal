@@ -20,6 +20,7 @@ library
     exposed-modules:  AbsSyntax, LexSyntax, ParSyntax, PrintSyntax,
                       AbsUtil, Preprocess, Infer, Typecheck, Eval, Core, Util
     other-modules:    
+    default-extensions: LambdaCase, TupleSections
     -- other-extensions:
     build-depends:    base ^>=4.12.0.0, containers, array, text, mtl
     hs-source-dirs:   src

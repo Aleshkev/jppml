@@ -11,7 +11,6 @@ import Control.Monad.Reader (MonadReader (local), ReaderT (runReaderT), asks)
 import Control.Monad.State (StateT (runStateT), gets, modify)
 import Data.Either (fromRight)
 import Data.Foldable (foldlM)
-import qualified Data.Foldable as Set
 import Data.Function ((&))
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes, fromJust, isJust)

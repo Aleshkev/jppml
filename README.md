@@ -55,7 +55,7 @@ The preprocessor and the typechecker allow interpreter to be relatively small an
 - [Typecheck.hs](src/Typecheck.hs) – type checker
 - [Infer.hs](src/Typecheck.hs) – type inference for the type checker, does type inference
 - [Eval.hs](src/Eval.hs) – interpreter
-- [app/Main.hs](app/Eval.hs) – entry point for the executable
+- [app/Main.hs](app/Main.hs) – entry point for the executable
 - [Core.hs](src/Core.hs) – built-in values for the interpreter
 - [Core.ml](src/Core.ml) – standard library. Includes functions that the interpreter depends on
 - [List.ml](src/List.ml) – standard `List` module, also a great example of JPPML code

@@ -2,12 +2,10 @@ module Core where
 
 import Control.Monad (when)
 import Control.Monad.Cont (liftIO)
-import Control.Monad.Except (throwError)
+import Control.Monad.Except (MonadError (catchError), throwError)
 import Control.Monad.Reader (local)
-import Control.Monad.State (gets)
-import Eval (BuiltinVal, EvalM, EvalState (typeState), FnVal (FnVal), Ptr, Val (VFn, VInt, VObjCon, VString), newPtrWith, boolToVal, emptyEvalEnv, eqVal, printVal, ptrGet, valToBool)
-import Infer (niceShowType)
-import qualified Typecheck
+import Eval (BuiltinVal, EvalM, FnVal (FnVal), Ptr, Val (VFn, VInt, VObj, VObjCon, VString), boolToVal, emptyEvalEnv, eqVal, newPtrWith, printVal, ptrGet, valToBool)
+import Util (mapTupleM)
 
 makeFn :: (Ptr -> EvalM Ptr) -> Val
 makeFn f = VFn $ FnVal emptyEvalEnv f
@@ -20,12 +18,7 @@ makeTernFn f = makeFn (\ptr1 -> newPtrWith $ makeFn (newPtrWith . makeFn . f ptr
 
 makeValBinFn :: (Val -> Val -> EvalM Val) -> Val
 makeValBinFn f =
-  makeBinFn
-    ( \ptr1 ptr2 -> do
-        [val1, val2] <- mapM ptrGet [ptr1, ptr2]
-        ret <- f val1 val2
-        newPtrWith ret
-    )
+  makeBinFn (\ptr1 ptr2 -> mapTupleM ptrGet (ptr1, ptr2) >>= uncurry f >>= newPtrWith)
 
 makeIntBinFn :: (Integer -> Integer -> Integer) -> Val
 makeIntBinFn op = makeValBinFn (\(VInt a) (VInt b) -> return $ VInt $ op a b)
@@ -46,22 +39,27 @@ builtinVals =
         )
     )
   ,
-    ( "to_string"
-    , "'a -> string"
+    ( "__try" -- Tries to execute the function and catches runtime errors. Returns "Some" with error message as string, or "None".
+    , "(unit -> unit) -> string option"
     , makeFn
         ( \argptr -> do
-            s <- printVal argptr
-            newPtrWith (VString s)
+            u <- newPtrWith (VObjCon "__Unit")
+            VFn (FnVal env f) <- ptrGet argptr
+            err <- catchError (local (const env) (f u >> return Nothing)) (return . Just)
+            case err of
+              Nothing -> newPtrWith $ VObjCon "None"
+              Just x -> newPtrWith (VString x) >>= (newPtrWith . VObj "Some")
         )
+    )
+  ,
+    ( "to_string"
+    , "'a -> string"
+    , makeFn (\argptr -> printVal argptr >>= (newPtrWith . VString))
     )
   ,
     ( "raise"
     , "'a -> 'b"
-    , makeFn
-        ( \argptr -> do
-            s <- printVal argptr
-            throwError s
-        )
+    , makeFn (\argptr -> printVal argptr >>= throwError)
     )
   , ("__cat", "string -> string -> string", makeValBinFn (\(VString a) (VString b) -> return $ VString $ a ++ b))
   , ("__add", "int -> int -> int", makeIntBinFn (+))
@@ -79,11 +77,7 @@ builtinVals =
   ,
     ( "__eq"
     , "'a -> 'a -> bool"
-    , makeBinFn
-        ( \a b -> do
-            eq <- eqVal a b
-            newPtrWith $ boolToVal eq
-        )
+    , makeBinFn (\a b -> eqVal a b >>= (newPtrWith . boolToVal))
     )
   , ("__lt", "int -> int -> bool", makeRelFn (<))
   , ("__le", "int -> int -> bool", makeRelFn (<=))

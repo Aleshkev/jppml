@@ -1,5 +1,9 @@
 
--- API copied from OCaml's List module.
+-- API based on OCaml's List module:
+-- https://ocaml.org/manual/5.1/api/List.html
+--
+-- Implementation also based on that from OCaml's List module:
+-- https://github.com/lucasaiu/ocaml/blob/master/stdlib/list.ml
 
 let length = fn l -> case l of
   | [] -> 0

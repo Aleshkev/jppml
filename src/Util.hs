@@ -3,7 +3,7 @@ module Util where
 import Data.Function ((&))
 import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
-import Data.List (nub)
+import Data.List (nub, isInfixOf)
 import System.IO (stderr, hPutStrLn)
 
 ansiDefault :: String
@@ -54,8 +54,20 @@ diffLines old new = Set.fromList new Set.\\ Set.fromList old & Set.toAscList
 existDuplicates :: Eq a => [a] -> Bool
 existDuplicates l = length (nub l) /= length l
 
+isReserved :: String -> Bool
+isReserved s = "__" `isInfixOf` s || "'__" `isInfixOf` s
+
 putStrLnErr :: String -> IO ()
 putStrLnErr = hPutStrLn stderr
 
 foldInserter :: (String -> a -> b -> b) -> ([(String, a)] -> b -> b)
 foldInserter f t env = foldl (\acc (k, v) -> f k v acc) env t
+
+mapTuple :: (a -> b) -> (a, a) -> (b, b)
+mapTuple f (a1, a2) = (f a1, f a2)
+
+mapTupleM :: Monad m => (a -> m b) -> (a, a) -> m (b, b)
+mapTupleM f (a1, a2) = do
+  b1 <- f a1
+  b2 <- f a2
+  return (b1, b2)

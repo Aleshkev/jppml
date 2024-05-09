@@ -146,7 +146,7 @@ printVal ptr = printVal' [] True ptr
             vals <- mapM (aux True) ptrs
             return $ "(" ++ intercalate ", " vals ++ ")"
           VObjCon "__Unit" -> return "()"
-          VObjCon "__Empty" -> return "[]"
+          VObjCon "__Nil" -> return "[]"
           VObjCon x -> return x
           VObj "__Cons" _ -> do
             ps <- collectList vis ptr
@@ -165,7 +165,7 @@ printVal ptr = printVal' [] True ptr
         let vis' = ptr : vis
         val <- ptrGet ptr
         case val of
-          VObjCon "__Empty" -> return []
+          VObjCon "__Nil" -> return []
           VObj "__Cons" x -> do
             val <- ptrGet x
             let (VTuple [p, nextp]) = val

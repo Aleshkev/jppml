@@ -11,13 +11,15 @@ import Control.Monad.Reader (MonadReader (local), ReaderT (runReaderT), asks)
 import Control.Monad.State (StateT (runStateT), gets, modify)
 import Data.Either (fromRight)
 import Data.Foldable (foldlM)
+import qualified Data.Foldable as Set
 import Data.Function ((&))
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes, fromJust, isJust)
 import qualified Data.Set as Set
 import Infer (Type (RTerm, RVar), TypeEq, collectVars, simplifyVars, substituteTypes, unifyAll)
 import ParSyntax (myLexer, pTyp)
-import Util (catMaybesFst, existDuplicates, foldInserter)
+import Util (catMaybesFst, existDuplicates, foldInserter, isReserved)
+import Data.List (find)
 
 newtype TypeDec = TypeDec (Map.Map String [Type])
 
@@ -104,7 +106,12 @@ typecheckCon x = case x of
 typecheckLet :: Src -> [LetBind] -> Maybe Exp -> TypecheckM ([(String, Type)], Maybe Type, [TypeEq])
 typecheckLet p letbinds innerExp = do
   let (ids, valExps) = (map letBindId letbinds, map letBindExp letbinds)
-  when (ids & catMaybes & existDuplicates) $ throwError ("multiple bindings for a symbol", p)
+  when (ids & catMaybes & existDuplicates) $
+    throwError ("multiple bindings for a symbol", p)
+  protBind <- asks (\env -> ids & catMaybes & filter isReserved & find (\x -> binds env & Map.member x))
+  when (isJust protBind) $
+    throwError ("redefinition of a protected symbol " ++ fromJust protBind, p)
+
   valTs <- mapM (const freshVar) valExps
   let valBinds = zip ids valTs & catMaybesFst
   eqs <-
@@ -164,11 +171,12 @@ typecheckExp = \case
     (argT, argdeps) <- typecheckExp exp
     retT <- freshVar
     (patTs, expTs, deps) <- mapM typecheckECaseBind ecasebinds & fmap unzip3
-    let makeEqDeps = map (,argT,p) patTs ++ map (,retT,p) expTs
+    let makeEqDeps = map (argT,,p) patTs ++ map (,retT,p) expTs
     return (retT, makeEqDeps ++ argdeps ++ concat deps)
   EFn p [Id id] retExp -> do
     fnT <- freshVar
     argT <- freshVar
+    when (isReserved id) $ throwError ("can't define symbol '" ++ id ++ "' in a function argument", p)
     (retT, retdeps) <- local (insertFreeBind id argT) (typecheckExp retExp)
     return (fnT, (fnT, RTerm [argT, retT] "__fn", p) : retdeps)
   _ -> error "unexpected expression at type checking stage"
@@ -188,8 +196,9 @@ typecheckPat x = case x of
   PCon _ con -> do
     conT <- typecheckCon con
     return (conT, Map.empty, [])
-  PId _ (Id id) -> do
+  PId p (Id id) -> do
     t <- freshVar
+    when (isReserved id) $ throwError ("can't define symbol '" ++ id ++ "' in a pattern", p)
     return (t, Map.singleton id t, [])
   PWild _ -> do
     t <- freshVar
@@ -319,7 +328,7 @@ insertConstructor constrId t typeVars typeId p = do
  where
   checkForRedefinition p = do
     does <- gets (\s -> globBinds s & Map.lookup constrId & isJust)
-    when does $ throwError ("redefinition of constructor '" ++ typeId ++ "'", p)
+    when does $ throwError ("redefinition of constructor '" ++ constrId ++ "'", p)
 
 typecheckDecLst :: [Dec] -> TypecheckM ()
 typecheckDecLst = mapM_ typecheckDec

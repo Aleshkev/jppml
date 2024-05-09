@@ -123,3 +123,22 @@ type ('a, 'b) f = One of 'a -> 'sdf #
 
 type f = One of int * int * string
 
+
+-- Mutually recursive values
+
+let a = 1 :: b and b = 2 :: a
+
+
+-- Protect reserved variables
+
+let __x = 1
+let __x = 1  let __x = 2 #
+
+let __cons = 2 #
+let _ = fn __cons -> 1 :: [] #
+let _ = case "s" of __cons -> 1 :: [] #
+
+
+-- Use identifier as type name and value name simultaneously
+
+type tree = Leaf   let tree = 7   let _ = print tree   type tree' = Leaf' of tree

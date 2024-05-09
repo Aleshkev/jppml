@@ -2,15 +2,15 @@
 -- Lists.
 
 let x = []
-let x = __Empty
+let x = __Nil
 
 let x = [1]
 let x = 1 :: []
-let x = __cons 1 __Empty
+let x = __cons 1 __Nil
 
 let x = 1 :: 2 :: 3 :: []
 let x = [1, 2, 3]
-let x = __cons 1 (__cons 2 (__cons 3 __Empty))
+let x = __cons 1 (__cons 2 (__cons 3 __Nil))
 
 -- Operators.
 
@@ -53,13 +53,13 @@ let x = __lt a b
 -- Lazy expressions.
 
 let x = a && b
-let x = __and a (fn __x -> b)
+let x = __and a (fn _x -> b)
 
 let x = a || b
-let x = __or a (fn __x -> b)
+let x = __or a (fn _x -> b)
 
 let x = if a then b else c
-let x = __if a (fn __x -> b) (fn __x -> c)
+let x = __if a (fn _x -> b) (fn _x -> c)
 
 -- Functions.
 
@@ -78,14 +78,14 @@ let x = [[2, [__add a b]]]
 -- Patterns.
 
 let x = case x of [] -> 0
-let x = case x of __Empty -> 0
+let x = case x of __Nil -> 0
 
 let x = case x of [1] -> 0
 let x = case x of 1 :: [] -> 0
-let x = case x of __Cons (1, __Empty) -> 0
+let x = case x of __Cons (1, __Nil) -> 0
 
 let x = case x of [1, 2] -> 0
 let x = case x of 1 :: 2 :: [] -> 0
-let x = case x of __Cons (1, __Cons (2, __Empty)) -> 0
+let x = case x of __Cons (1, __Cons (2, __Nil)) -> 0
 
 

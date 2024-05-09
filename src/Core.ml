@@ -86,7 +86,7 @@ let snd = fn x -> case x of (_, b) -> b
 
 -- List operations
 
-type 'a list = __Empty | __Cons of 'a * 'a list
+type 'a list = __Nil | __Cons of 'a * 'a list
 
 let __cons = fn x y -> __Cons (x, y)
 

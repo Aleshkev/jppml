@@ -7,7 +7,6 @@ import Data.Function ((&))
 import Data.Maybe (isJust)
 import ParSyntax (myLexer, pListDec)
 import Preprocess (transTree)
-import AbsSyntax (BNFC'Position, HasPosition)
 
 type Src = BNFC'Position
 
@@ -50,7 +49,7 @@ exnBindTyp = \case
 exnBindHasArg :: ExnBind -> Bool
 exnBindHasArg x = exnBindTyp x & isJust
 
-typBindTypLst :: TypBind -> TypLst 
+typBindTypLst :: TypBind -> TypLst
 typBindTypLst = \case
   TBJust _ typlst _ _ -> typlst
 

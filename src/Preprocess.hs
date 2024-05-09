@@ -14,7 +14,7 @@ transExp x = case x of
   EId p id -> EId p id
   ETup p exp exps -> ETup p (transExp exp) (map transExp exps)
   ELst p exps -> case exps of
-    [] -> EObjCon p (IdCap "__Empty")
+    [] -> EObjCon p (IdCap "__Nil")
     exp : exps' -> transExp $ ECons p (transExp exp) (transExp $ ELst p exps')
   EApp p exp1 exp2 -> EApp p (transExp exp1) (transExp exp2)
   ENeg p exp -> repWithFn p "__neg" [exp]
@@ -34,9 +34,9 @@ transExp x = case x of
           ERGt _ -> "__gt"
           ERGe _ -> "__ge"
     repWithFn p op [exp1, exp2]
-  EAnd p exp1 exp2 -> repWithFn p "__and" [exp1, EFn p [Id "__x"] exp2]
-  EOr p exp1 exp2 -> repWithFn p "__or" [exp1, EFn p [Id "__x"] exp2]
-  EIf p exp1 exp2 exp3 -> repWithFn p "__if" [exp1, EFn p [Id "__x"] exp2, EFn p [Id "__x"] exp3]
+  EAnd p exp1 exp2 -> repWithFn p "__and" [exp1, EFn p [Id "_x"] exp2]
+  EOr p exp1 exp2 -> repWithFn p "__or" [exp1, EFn p [Id "_x"] exp2]
+  EIf p exp1 exp2 exp3 -> repWithFn p "__if" [exp1, EFn p [Id "_x"] exp2, EFn p [Id "_x"] exp3]
   ELet p letbinds exp -> ELet p (map transLetBind letbinds) (transExp exp)
   ECase p exp ecasebinds -> ECase p (transExp exp) (map transECaseBind ecasebinds)
   EFn p ids exp -> case ids of
@@ -61,7 +61,7 @@ transPat x = case x of
   PWild p -> PWild p
   PTup p pat pats -> PTup p (transPat pat) (map transPat pats)
   PLst p pats -> case pats of
-    [] -> PObjCon p (IdCap "__Empty")
+    [] -> PObjCon p (IdCap "__Nil")
     pat : pats_ -> transPat $ PCons p pat (PLst p pats_)
   PObjCon p idcap -> PObjCon p idcap
   PObj p idcap pat -> PObj p idcap (transPat pat)

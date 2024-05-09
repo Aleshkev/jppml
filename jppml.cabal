@@ -22,7 +22,7 @@ library
     other-modules:    
     default-extensions: LambdaCase, TupleSections
     -- other-extensions:
-    build-depends:    base ^>=4.12.0.0, containers, array, text, mtl
+    build-depends:    base, containers, array, text, mtl
     hs-source-dirs:   src
     default-language: Haskell2010
 
@@ -32,7 +32,7 @@ executable jppml
     -- other-modules:
     -- other-extensions:
     build-depends:
-        base ^>=4.12.0.0, containers, array, text, mtl,
+        base, containers, array, text, mtl,
         jppml
 
     hs-source-dirs:   app
@@ -48,5 +48,5 @@ test-suite jppml-test
     hs-source-dirs:   test
     main-is:          Main.hs
     build-depends:
-        base ^>=4.12.0.0,  containers, array, text, mtl, directory,
+        base,  containers, array, text, mtl, directory,
         jppml

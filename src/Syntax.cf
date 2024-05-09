@@ -1,5 +1,5 @@
 
-entrypoints [Dec], Typ, Exp                                     ;
+entrypoints [Dec], Typ, Exp                           ;
 
 -- Comments
 
@@ -8,9 +8,9 @@ comment "(*" "*)" ;
 
 -- Identifiers
 
-token Id ('_'* lower (letter | digit | '_' | '\'')*)              ;
-token IdCap ('_'* upper (letter | digit | '_'| '\'')*)           ;
-token IdVar ('\'' '_'* (letter | digit | '_')*)            ;
+token Id ('_'* lower (letter | digit | '_' | '\'')*)  ;
+token IdCap ('_'* upper (letter | digit | '_'| '\'')*);
+token IdVar ('\'' '_'* (letter | digit | '_')*)       ;
 
 -- Constants
 

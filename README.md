@@ -82,6 +82,10 @@ The preprocessor and the typechecker allow interpreter to be relatively small an
 - [good/](good/), [bad/](bad/) – folders with examples of correct and incorrect code. Correct code doesn't crash so examples of raising errors are in `bad/`.
 - [test/Main.hs](test/Main.hs) and others in [test/](test/) – files with many small tests, and source code for the program to run all tests
 
+## Zaktualizowany opis języka
+
+Zaktualizowany opis języka znajduje się w [zaktualizowany_opis.pdf](./zaktualizowany_opis.pdf). Nie było wielkich zmian względem deklaracji języka.
+
 ## Cennik
 
 `+` = jest zaimplementowane

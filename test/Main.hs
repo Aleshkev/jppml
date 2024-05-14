@@ -3,7 +3,6 @@ module Main (main) where
 
 import AbsUtil (stringToDecs)
 import Control.Monad
-import Control.Monad.Except (runExceptT)
 import Control.Monad.IO.Class (liftIO)
 import Core (builtinVals)
 import Data.Either (isRight, rights)
@@ -11,15 +10,14 @@ import Data.Function
 import Data.List (intercalate, isInfixOf, isPrefixOf, sort)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
-import Eval (EvalState (typeState), emptyEvalState, evalDecLst, evalString, insertBuiltins, printVars, runEvalM)
+import Eval (EvalState (typeState), emptyEvalState, evalString, insertBuiltins, printVars, runEvalM)
 import ParSyntax
 import Preprocess (transTree)
 import PrintSyntax (printTree)
-import System.Directory (getDirectoryContents, listDirectory)
+import System.Directory (listDirectory)
 import System.Exit (exitFailure)
 import Typecheck (TypeState (globBinds), runTypecheckM, typecheckDecLst)
 import Util
-import Control.Exception (try)
 
 groupLines :: [String] -> [[String]]
 groupLines [] = []

@@ -37,3 +37,7 @@ cabal.project.local~
 
 !Makefile
 src/Makefile
+
+
+jonasz_*
+_*

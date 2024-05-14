@@ -26,12 +26,13 @@ There is also a `Makefile` that is a shortcut for the above, and also copies the
 
 ```bash
 make
+./interpreter ./good/01-02-hello-world.ml
 ```
 
-If you want to pass arguments to the interpreter, you need to use this version of `cabal run`:
+If you want to pass arguments to the interpreter, you need to use the following version of `cabal run`:
 
 ```bash
-cabal run jppml -- ./good/01-01-basic-types.ml
+cabal run jppml -- ./good/01-02-hello-world.ml
 ```
 
 
@@ -54,6 +55,8 @@ cabal test
 ## Usage
 
 Use `./interpreter` without arguments to enter REPL (recommended, prints things in color and can display information about types). Or `./interpreter <file>` to interpret code from a file.
+
+Important: the interpreter will _only_ work in the project's main directory. It needs to load built-in values and always assumes they are in `./src/Core.ml`.
 
 ## Source code
 

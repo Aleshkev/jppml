@@ -19,6 +19,7 @@ import System.Directory (getDirectoryContents, listDirectory)
 import System.Exit (exitFailure)
 import Typecheck (TypeState (globBinds), runTypecheckM, typecheckDecLst)
 import Util
+import Control.Exception (try)
 
 groupLines :: [String] -> [[String]]
 groupLines [] = []
@@ -86,7 +87,6 @@ getType s = do
   case (fmap transTree . pListDec . myLexer) s of
     Left x -> return $ Left x
     Right decs -> do
-      -- liftIO $ runExceptT $ runTypecheckM (typecheckDOpen "Core") tState
       (Right (_, evalState)) <- runEvalM (insertBuiltins builtinVals) emptyEvalState
       let ts = typeState evalState
       typeRet <- liftIO $ runTypecheckM (typecheckDecLst decs) ts

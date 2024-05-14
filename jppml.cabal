@@ -4,7 +4,7 @@ version:            0.1.0.0
 -- synopsis:
 -- description:
 license:            MIT
-license-file:       LICENSE
+license-file:       LICENSE.md
 author:             Jonasz Aleszkiewicz
 maintainer:         43296251+Aleshkev@users.noreply.github.com
 -- copyright:

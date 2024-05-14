@@ -86,7 +86,7 @@ ptrGet :: Ptr -> EvalM Val
 ptrGet ptr = do
   val <- gets vals
   case val & Map.lookup ptr of
-    Nothing -> throwError $ "internal: null pointer '" ++ show ptr ++ "'"
+    Nothing -> error $ "internal: null pointer '" ++ show ptr ++ "'"
     Just VRec -> throwError "value not yet constructed"
     Just x -> return x
 
@@ -316,7 +316,7 @@ insertBuiltins vals = do
   tState <- gets typeState
   coreOk <- liftIO $ runTypecheckM (typecheckDec (DOpen Nothing [IdCap "Core"])) tState
   case coreOk of
-    Left err -> throwError $ "when loading 'Core':" ++ show err
+    Left (err, p) -> throwError $ "when loading module 'Core' at " ++ printPosition p ++ ": " ++ err
     Right _ -> return ()
 
   evalOpen "Core"

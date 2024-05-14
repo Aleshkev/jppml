@@ -19,6 +19,7 @@ import Infer (Type (RTerm, RVar), TypeEq, collectVars, simplifyVars, substituteT
 import ParSyntax (myLexer, pTyp)
 import Util (catMaybesFst, existDuplicates, foldInserter, isReserved)
 import Data.List (find)
+import PrintSyntax (printTree)
 
 newtype TypeDec = TypeDec (Map.Map String [Type])
 
@@ -109,7 +110,7 @@ typecheckLet p letbinds innerExp = do
     throwError ("multiple bindings for a symbol", p)
   protBind <- asks (\env -> ids & catMaybes & filter isReserved & find (\x -> binds env & Map.member x))
   when (isJust protBind) $
-    throwError ("redefinition of a protected symbol " ++ fromJust protBind, p)
+    throwError ("redefinition of protected symbol '" ++ fromJust protBind ++ "'", p)
 
   valTs <- mapM (const freshVar) valExps
   let valBinds = zip ids valTs & catMaybesFst
@@ -263,7 +264,7 @@ typecheckTyp p vars t = do
         Just vcount -> checkParams id vcount (length vs)
       mapM_ walk vs
   checkTypeVarExists id =
-    unless (vars & Set.member id) $ throwError ("undefined type variable " ++ id ++ show vars, p)
+    unless (vars & Set.member id) $ throwError ("undefined type variable " ++ id, p)
   throwUndefinedType id =
     throwError ("undefined type '" ++ id ++ "'", p)
   checkParams id nExpect nUsed = do
@@ -286,7 +287,7 @@ typecheckDec (DType p typbinds) = do
  where
   getParamVar = \case
     TIdVar _ (IdVar x) -> return x
-    x -> throwError ("a type can be parametrized only by type variables", srcOf x)
+    x -> throwError ("a type can be parametrized only by type variables, not '" ++ printTree x ++ "'", srcOf x)
   insertType id nVars = do
     exists <- gets (\state -> types state & Map.member id)
     when exists $ throwError ("redefinition of type '" ++ id ++ "'", p)
@@ -308,11 +309,11 @@ typecheckDec (DOpen p idcaps) = do
     case (source :: Either IOError String) of
       Left exn -> throwError ("can't load module '" ++ id ++ "': " ++ show exn, p)
       Right s -> case stringToDecs s of
-        Left exn -> throwError ("in module " ++ id ++ ": " ++ exn, p)
+        Left exn -> throwError ("in module '" ++ id ++ "': " ++ exn, p)
         Right decs ->
           catchError
             (typecheckDecLst decs)
-            (\(exn, p') -> throwError ("in module " ++ id ++ " at " ++ printPosition p' ++ ": " ++ exn, p))
+            (\(exn, p') -> throwError ("in module '" ++ id ++ "' at " ++ printPosition p' ++ ": " ++ exn, p))
 
 -- Inserts a global function or value constructing an object. Does not allow redefinitions.
 insertConstructor :: String -> Maybe Type -> [String] -> String -> Src -> TypecheckM ()

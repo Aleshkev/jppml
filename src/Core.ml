@@ -1,6 +1,4 @@
 
-
-
 -- Exceptions
 
 exception Exit
@@ -23,11 +21,6 @@ type 'a option =
 type bool = True | False
 
 -- Comparisons
-
--- let __eq = fn x y -> __magicEq ("eq", x, y)
--- let __ne = fn x y -> not (x == y)
-
--- let __lt = fn x y -> __magicRelOp ("lt", x, y)
 
 let min = fn a b -> if a < b then a else b
 let max = fn a b -> if a > b then a else b
